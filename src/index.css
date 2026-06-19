@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-petroleo: #245C5A;
+  --color-brand-azul: #6F8F9A;
+  --color-brand-areia: #F4EFE7;
+  --color-brand-offwhite: #FAF8F4;
+  --color-brand-terracota: #C9826B;
+  --color-brand-grafite: #2F3437;
+  --color-brand-informativo: #DDE8E5;
+  --color-brand-cuidado: #F1D6C8;
+  --color-brand-linha: #C9D8D5;
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Poppins', sans-serif;
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+/* Base print rules */
+@media print {
+  body {
+    background: transparent !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .page {
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-after: always;
+    break-after: page;
+  }
+  
+  /* Ensure background colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* A4 Page Simulation for screen */
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  background-color: var(--color-brand-offwhite);
+  color: var(--color-brand-grafite);
+  margin: 2rem auto;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  position: relative;
+  box-sizing: border-box;
+  padding: 25mm 20mm; /* standard A4 margins inside */
+  overflow: hidden;
+  font-family: var(--font-sans);
+  line-height: 1.45;
+}
+
+/* Custom Markdown Content Styling */
+.ebook-content h1 {
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+  color: var(--color-brand-petroleo);
+  margin-top: 0;
+  margin-bottom: 2rem;
+  font-weight: 600;
+  page-break-before: always;
+  break-before: page;
+}
+
+.ebook-content h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--color-brand-petroleo);
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.ebook-content h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--color-brand-azul);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.ebook-content p {
+  margin-bottom: 1rem;
+  font-size: 11pt;
+}
+
+.ebook-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.ebook-content li {
+  margin-bottom: 0.5rem;
+  font-size: 11pt;
+}
+
+.ebook-content strong {
+  font-weight: 600;
+  color: var(--color-brand-petroleo);
+}
+
+/* Custom Boxes */
+.box-cuidado {
+  background-color: var(--color-brand-cuidado);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+}
+.box-cuidado h3, .box-cuidado h2 {
+  color: #8A4D3B !important;
+  margin-top: 0;
+}
+
+.box-informativo {
+  background-color: var(--color-brand-informativo);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+}
+.box-informativo h3, .box-informativo h2 {
+  color: var(--color-brand-petroleo) !important;
+  margin-top: 0;
+}
+
+.box-reflexao {
+  background-color: var(--color-brand-areia);
+  border: 1px solid var(--color-brand-linha);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+}
+.box-reflexao h3, .box-reflexao h2 {
+  color: var(--color-brand-petroleo) !important;
+  margin-top: 0;
+}
+
+.frase-central {
+  background-color: var(--color-brand-offwhite);
+  border-left: 4px solid var(--color-brand-terracota);
+  padding: 1rem 1.5rem;
+  margin: 2rem 0;
+  font-size: 14pt;
+  font-style: italic;
+  color: var(--color-brand-petroleo);
+  font-weight: 500;
+}
+
+.chapter-opener {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100%;
+}
+.chapter-number {
+  font-size: 8rem;
+  font-weight: 700;
+  color: var(--color-brand-areia);
+  line-height: 1;
+  margin-bottom: 1rem;
+  margin-left: -5px;
+}
