@@ -393,6 +393,101 @@ export default function App() {
     setShowClearConfirm(false);
   };
 
+  const resolveOklchToHsla = (cssText: string): string => {
+    let result = "";
+    let i = 0;
+    const len = cssText.length;
+    
+    while (i < len) {
+      if (cssText.substring(i, i + 6) === "oklch(") {
+        let parenthesisCount = 1;
+        let j = i + 6;
+        while (j < len && parenthesisCount > 0) {
+          if (cssText[j] === "(") {
+            parenthesisCount++;
+         } else if (cssText[j] === ")") {
+            parenthesisCount--;
+          }
+          j++;
+        }
+        
+        const inner = cssText.substring(i + 6, j - 1).trim();
+        
+        if (inner.includes("from ") || inner.includes("var(")) {
+          result += "rgba(128, 128, 128, 0.5)";
+        } else {
+          const normalized = inner.replace(/\s*\/\s*/, " ");
+          const parts = normalized.split(/\s+/).filter(Boolean);
+          if (parts.length >= 3) {
+            let lVal = parseFloat(parts[0]);
+            if (parts[0].includes("%")) {
+              lVal = lVal / 100;
+            }
+            
+            let cVal = parseFloat(parts[1]);
+            if (parts[1].includes("%")) {
+              cVal = cVal / 100;
+            }
+            
+            let hVal = parseFloat(parts[2]);
+            if (isNaN(hVal)) hVal = 0;
+            
+            let alpha = "1";
+            if (parts.length >= 4) {
+              alpha = parts[3].trim();
+            }
+            
+            const lightness = Math.round(lVal * 100);
+            const saturation = Math.min(100, Math.round((cVal / 0.4) * 100));
+            const hue = Math.round(hVal);
+            
+            result += `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+          } else {
+            result += "rgba(128, 128, 128, 0.5)";
+          }
+        }
+        i = j;
+      } else {
+        result += cssText[i];
+        i++;
+      }
+    }
+    return result;
+  };
+
+  const getOklchFreeStyleString = (): string => {
+    let combinedCss = "";
+    
+    try {
+      for (let i = 0; i < document.styleSheets.length; i++) {
+        const sheet = document.styleSheets[i];
+        try {
+          const rules = sheet.cssRules || sheet.rules;
+          if (rules) {
+            for (let j = 0; j < rules.length; j++) {
+              combinedCss += rules[j].cssText + "\n";
+            }
+          }
+        } catch (e) {
+          // Safe cross-origin block ignore
+        }
+      }
+    } catch (e) {
+      console.warn("Failed reading sheets:", e);
+    }
+
+    try {
+      const styles = document.querySelectorAll("style");
+      styles.forEach((style) => {
+        combinedCss += (style.textContent || "") + "\n";
+      });
+    } catch (e) {
+      console.warn("Failed reading style tags:", e);
+    }
+
+    return resolveOklchToHsla(combinedCss);
+  };
+
   const printPdf = async () => {
     if (blocks.length === 0) {
       showToast(
@@ -425,6 +520,9 @@ export default function App() {
         throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
       }
 
+      // Pre-extract stylesheet rules as oklch-free standard CSS
+      const cleanCss = getOklchFreeStyleString();
+
       // Initialize A4 Portrait PDF: 210mm x 297mm
       const doc = new jsPDF({
         orientation: "portrait",
@@ -453,6 +551,34 @@ export default function App() {
           // Force fixed layout dimensions for perfect page cuts matching CSS
           windowWidth: 794,  // 210mm in pixels at 96 DPI
           windowHeight: 1123, // 297mm in pixels at 96 DPI
+          onclone: (clonedDoc) => {
+            // 1. Remove Tailwind links & style tag blocks in clone to prevent color parsing errors
+            const styledLinks = clonedDoc.querySelectorAll("link[rel='stylesheet'], style");
+            styledLinks.forEach((el) => {
+              if (el.tagName.toLowerCase() === "link") {
+                const href = el.getAttribute("href") || "";
+                if (!href.includes("fonts.googleapis.com") && !href.includes("fonts.gstatic.com")) {
+                  el.remove();
+                }
+              } else {
+                el.remove();
+              }
+            });
+
+            // 2. Inject our oklch-free, hsla-approximate CSS string
+            const styleEl = clonedDoc.createElement("style");
+            styleEl.textContent = cleanCss;
+            clonedDoc.head.appendChild(styleEl);
+
+            // 3. Clean any inline oklch attributes inside elements
+            clonedDoc.querySelectorAll("[style]").forEach((el) => {
+              const elHtml = el as HTMLElement;
+              let inlineStyle = elHtml.getAttribute("style") || "";
+              if (inlineStyle.includes("oklch")) {
+                elHtml.setAttribute("style", resolveOklchToHsla(inlineStyle));
+              }
+            });
+          }
         });
 
         const imgData = canvas.toDataURL("image/jpeg", 0.95);
