@@ -95,70 +95,74 @@ export function EbookPreview({ settings, contentPages }: EbookPreviewProps) {
   
   const contentStartPageNum = currentPageCount;
 
-  // Extract chapters / principal headings from parsed HTML of the content pages
-  const parser = new DOMParser();
-  const tocEntries: TocEntry[] = [];
+  // Extract chapters / principal headings from parsed HTML of the content pages, memoized for performance
+  const tocEntries = React.useMemo<TocEntry[]>(() => {
+    const parser = new DOMParser();
+    const entries: TocEntry[] = [];
 
-  contentPages.forEach((pageHtml, index) => {
-    const pageNum = contentStartPageNum + index;
-    const pageDoc = parser.parseFromString(pageHtml, 'text/html');
+    contentPages.forEach((pageHtml, index) => {
+      const pageNum = contentStartPageNum + index;
+      const pageDoc = parser.parseFromString(pageHtml, 'text/html');
 
-    // Check if it's a chapter opener
-    const chapterOpener = pageDoc.querySelector('.chapter-opener');
-    if (chapterOpener) {
-      const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
-      const titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
-      tocEntries.push({
-        title: `Capítulo ${numText.padStart(2, '0')}: ${titleText || 'Introdução'}`,
-        pageNumber: pageNum,
-        isChapter: true,
-        domId: `content-page-${index}`
-      });
-    } else {
-      // Look for other prominent main headings (H1)
-      const h1Headings = pageDoc.querySelectorAll('h1');
-      let foundH1 = false;
-      h1Headings.forEach((h1) => {
-        // Prevent listing secondary boxes content in Table of Contents
-        const isExcluded = h1.closest('.box-reflexao') || 
-                           h1.closest('.box-cuidado') || 
-                           h1.closest('.box-informativo');
-        if (!isExcluded) {
-          const text = h1.textContent?.trim() || '';
-          if (text && text.length > 2) {
-            tocEntries.push({
-              title: text,
-              pageNumber: pageNum,
-              isChapter: true,
-              domId: `content-page-${index}`
-            });
-            foundH1 = true;
-          }
-        }
-      });
-
-      // If no prominent H1 on this page, look for primary H2 elements
-      if (!foundH1) {
-        const h2Headings = pageDoc.querySelectorAll('h2');
-        h2Headings.forEach((h2) => {
-          const isExcluded = h2.closest('.box-reflexao') || 
-                             h2.closest('.box-cuidado') || 
-                             h2.closest('.box-informativo');
+      // Check if it's a chapter opener
+      const chapterOpener = pageDoc.querySelector('.chapter-opener');
+      if (chapterOpener) {
+        const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
+        const titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
+        entries.push({
+          title: `Capítulo ${numText.padStart(2, '0')}: ${titleText || 'Introdução'}`,
+          pageNumber: pageNum,
+          isChapter: true,
+          domId: `content-page-${index}`
+        });
+      } else {
+        // Look for other prominent main headings (H1)
+        const h1Headings = pageDoc.querySelectorAll('h1');
+        let foundH1 = false;
+        h1Headings.forEach((h1) => {
+          // Prevent listing secondary boxes content in Table of Contents
+          const isExcluded = h1.closest('.box-reflexao') || 
+                             h1.closest('.box-cuidado') || 
+                             h1.closest('.box-informativo');
           if (!isExcluded) {
-            const text = h2.textContent?.trim() || '';
+            const text = h1.textContent?.trim() || '';
             if (text && text.length > 2) {
-              tocEntries.push({
+              entries.push({
                 title: text,
                 pageNumber: pageNum,
-                isChapter: false,
+                isChapter: true,
                 domId: `content-page-${index}`
               });
+              foundH1 = true;
             }
           }
         });
+
+        // If no prominent H1 on this page, look for primary H2 elements
+        if (!foundH1) {
+          const h2Headings = pageDoc.querySelectorAll('h2');
+          h2Headings.forEach((h2) => {
+            const isExcluded = h2.closest('.box-reflexao') || 
+                               h2.closest('.box-cuidado') || 
+                               h2.closest('.box-informativo');
+            if (!isExcluded) {
+              const text = h2.textContent?.trim() || '';
+              if (text && text.length > 2) {
+                entries.push({
+                  title: text,
+                  pageNumber: pageNum,
+                  isChapter: false,
+                  domId: `content-page-${index}`
+                });
+              }
+            }
+          });
+        }
       }
-    }
-  });
+    });
+
+    return entries;
+  }, [contentPages, contentStartPageNum]);
 
   const ctaPageNum = contentStartPageNum + contentPages.length;
   const finalPageNum = ctaPageNum + (settings.ctaText ? 1 : 0);

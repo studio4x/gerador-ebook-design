@@ -1,21 +1,39 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ProjectSettings, ContentBlock, DEFAULT_SETTINGS, EbookProject } from './types';
-import { parseEbookContent, extractMetadataFromContent } from './utils/parser';
-import { chunkIntoPages } from './utils/paginator';
-import { EbookPreview } from './components/EbookPreview';
-import { parseHandoffMarkdown, LayoutRevision } from './utils/handoffParser';
-import { 
-  FileText, LayoutTemplate, Download, Upload, CheckCircle, 
-  AlertTriangle, Plus, Trash2, History, Palette, RefreshCw, 
-  Globe, User, BookOpen, AlertCircle 
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  ProjectSettings,
+  ContentBlock,
+  DEFAULT_SETTINGS,
+  EbookProject,
+} from "./types";
+import { parseEbookContent, extractMetadataFromContent } from "./utils/parser";
+import { chunkIntoPages } from "./utils/paginator";
+import { EbookPreview } from "./components/EbookPreview";
+import { parseHandoffMarkdown, LayoutRevision } from "./utils/handoffParser";
+import {
+  FileText,
+  LayoutTemplate,
+  Download,
+  Upload,
+  CheckCircle,
+  AlertTriangle,
+  Plus,
+  Trash2,
+  History,
+  Palette,
+  RefreshCw,
+  Globe,
+  User,
+  BookOpen,
+  AlertCircle,
+} from "lucide-react";
 
 export default function App() {
   const initialSettings: ProjectSettings = {
     title: "Não é Falta de Disciplina",
     shortTitle: "Não é Falta de Disciplina",
     densityMode: "comfortable",
-    subtitle: "Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente",
+    subtitle:
+      "Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente",
     supportPhrase: "Rotina possível, não rotina perfeita.",
     professionalName: "Dra. Deyse Simon",
     professionalTitle: "Terapeuta Ocupacional e Psicanalista",
@@ -24,28 +42,32 @@ export default function App() {
     website: "https://conexaoseres.com.br",
     materialType: "E-book educativo de baixo ticket",
     targetAudience: "Adultos neurodivergentes e rede de apoio",
-    ctaText: "Se este material fez sentido para você, talvez seja importante olhar para sua rotina de forma mais individualizada.\n\nA Terapia Ocupacional pode ajudar a compreender como rotina, sensorialidade, energia, ambiente, autonomia e participação se relacionam no seu cotidiano.",
+    ctaText:
+      "Se este material fez sentido para você, talvez seja importante olhar para sua rotina de forma mais individualizada.\n\nA Terapia Ocupacional pode ajudar a compreender como rotina, sensorialidade, energia, ambiente, autonomia e participação se relacionam no seu cotidiano.",
     ctaButtonText: "Falar com a Conexão Seres",
-    contactAddress: "Rua Petrobrás, 683 — Vila Antonieta — São Paulo/SP — CEP 03474-060",
+    contactAddress:
+      "Rua Petrobrás, 683 — Vila Antonieta — São Paulo/SP — CEP 03474-060",
     instagram: "@conexao.seres",
     email: "contato@conexaoseres.com.br",
     whatsapp: "https://wa.me/5511964818096",
     schedulingUrl: "https://conexaoseres.com.br/agendar-avaliacao-e-contato/",
-    educationalWarning: "Este material tem caráter educativo e não substitui avaliação, diagnóstico ou acompanhamento profissional individualizado.",
-    generateToc: true
+    educationalWarning:
+      "Este material tem caráter educativo e não substitui avaliação, diagnóstico ou acompanhamento profissional individualizado.",
+    generateToc: true,
   };
 
   const defaultRev: LayoutRevision = {
-    id: 'initial-default',
-    filename: 'EBOOK_VISUAL_HANDOFF.md (Padrão)',
-    uploadedAt: new Date().toLocaleString('pt-BR'),
+    id: "initial-default",
+    filename: "EBOOK_VISUAL_HANDOFF.md (Padrão)",
+    uploadedAt: new Date().toLocaleString("pt-BR"),
     settings: initialSettings,
-    rawContent: '# Handoff Visual — E-book Conexão Seres\n\n**Título:** Não é Falta de Disciplina\n**Subtítulo:** Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente...'
+    rawContent:
+      "# Handoff Visual — E-book Conexão Seres\n\n**Título:** Não é Falta de Disciplina\n**Subtítulo:** Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente...",
   };
 
-  const [activeTab, setActiveTab] = useState<'content' | 'preview'>('content');
+  const [activeTab, setActiveTab] = useState<"content" | "preview">("content");
   const [settings, setSettings] = useState<ProjectSettings>(() => {
-    const saved = localStorage.getItem('ebook_layout_settings');
+    const saved = localStorage.getItem("ebook_layout_settings");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -54,7 +76,7 @@ export default function App() {
     return initialSettings;
   });
   const [blocks, setBlocks] = useState<ContentBlock[]>(() => {
-    const saved = localStorage.getItem('ebook_layout_blocks');
+    const saved = localStorage.getItem("ebook_layout_blocks");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -62,12 +84,13 @@ export default function App() {
     }
     return [];
   });
-  const [parsedHtml, setParsedHtml] = useState<string>('');
+  const [parsedHtml, setParsedHtml] = useState<string>("");
   const [contentPages, setContentPages] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [reprocessTrigger, setReprocessTrigger] = useState(0);
   const [revisions, setRevisions] = useState<LayoutRevision[]>(() => {
-    const saved = localStorage.getItem('ebook_layout_revisions');
+    const saved = localStorage.getItem("ebook_layout_revisions");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -76,17 +99,23 @@ export default function App() {
     return [defaultRev];
   });
   const [activeRevisionId, setActiveRevisionId] = useState<string>(() => {
-    const saved = localStorage.getItem('ebook_layout_active_id');
-    return saved || 'initial-default';
+    const saved = localStorage.getItem("ebook_layout_active_id");
+    return saved || "initial-default";
   });
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handoffFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" = "info",
+  ) => {
     setNotification({ message, type });
   };
 
@@ -102,66 +131,79 @@ export default function App() {
   // Save to localStorage whenever things change
   useEffect(() => {
     if (revisions.length > 0) {
-      localStorage.setItem('ebook_layout_revisions', JSON.stringify(revisions));
+      localStorage.setItem("ebook_layout_revisions", JSON.stringify(revisions));
     }
   }, [revisions]);
 
   useEffect(() => {
     if (activeRevisionId) {
-      localStorage.setItem('ebook_layout_active_id', activeRevisionId);
+      localStorage.setItem("ebook_layout_active_id", activeRevisionId);
     }
   }, [activeRevisionId]);
 
   useEffect(() => {
-    localStorage.setItem('ebook_layout_settings', JSON.stringify(settings));
+    localStorage.setItem("ebook_layout_settings", JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem('ebook_layout_blocks', JSON.stringify(blocks));
+    localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
   }, [blocks]);
 
-  // 1. Extract content metadata when blocks change, guarding against infinite loops
+  // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
-    if (blocks.length > 0) {
-      const contentMetadata = extractMetadataFromContent(blocks);
-      if (Object.keys(contentMetadata).length > 0) {
-        setSettings(prev => {
-          let hasChange = false;
-          const merged = { ...prev };
-          for (const key of Object.keys(contentMetadata) as Array<keyof ProjectSettings>) {
-            if (prev[key] !== contentMetadata[key]) {
-              (merged as any)[key] = contentMetadata[key];
-              hasChange = true;
-            }
-          }
-          return hasChange ? merged : prev;
-        });
-      }
-    }
-  }, [blocks]);
-
-  // 2. Parse and chunk pages whenever blocks, settings OR reprocessTrigger change
-  useEffect(() => {
-    async function updateHtmlAndPages() {
+    const timer = setTimeout(() => {
       if (blocks.length > 0) {
-        const html = await parseEbookContent(blocks);
-        setParsedHtml(html);
-        const pages = chunkIntoPages(html, settings.densityMode);
-        setContentPages(pages);
-      } else {
-        setParsedHtml('');
-        setContentPages([]);
+        const contentMetadata = extractMetadataFromContent(blocks);
+        if (Object.keys(contentMetadata).length > 0) {
+          setSettings((prev) => {
+            let hasChange = false;
+            const merged = { ...prev };
+            for (const key of Object.keys(contentMetadata) as Array<
+              keyof ProjectSettings
+            >) {
+              if (prev[key] !== contentMetadata[key]) {
+                (merged as any)[key] = contentMetadata[key];
+                hasChange = true;
+              }
+            }
+            return hasChange ? merged : prev;
+          });
+        }
       }
-    }
-    updateHtmlAndPages();
-  }, [blocks, settings, reprocessTrigger]);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [blocks]);
+
+  // 2. Parse and chunk pages whenever blocks, settings.densityMode OR reprocessTrigger change, with a 400ms debounce
+  // This avoids running heavy DOMParser based pagination while actively typing or adjusting style sliders
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      async function updateHtmlAndPages() {
+        if (blocks.length > 0) {
+          const html = await parseEbookContent(blocks);
+          setParsedHtml(html);
+          const pages = chunkIntoPages(html, settings.densityMode);
+          setContentPages(pages);
+        } else {
+          setParsedHtml("");
+          setContentPages([]);
+        }
+      }
+      updateHtmlAndPages();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [blocks, settings.densityMode, reprocessTrigger]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const files = Array.from(e.target.files);
-    
+
     // Sort files by name automatically to handle parte-1.md, parte-2.md
-    files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    files.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true }),
+    );
 
     const newBlocks: ContentBlock[] = [];
     for (const file of files) {
@@ -169,36 +211,42 @@ export default function App() {
       newBlocks.push({
         id: crypto.randomUUID(),
         filename: file.name,
-        content: text
+        content: text,
       });
     }
 
-    setBlocks(prev => [...prev, ...newBlocks]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setBlocks((prev) => [...prev, ...newBlocks]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const addManualBlock = () => {
-    setBlocks(prev => [
+    setBlocks((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), filename: `Bloco Manual ${prev.length + 1}`, content: '' }
+      {
+        id: crypto.randomUUID(),
+        filename: `Bloco Manual ${prev.length + 1}`,
+        content: "",
+      },
     ]);
   };
 
   const updateBlockContent = (id: string, content: string) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b));
+    setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, content } : b)));
   };
 
   const removeBlock = (id: string) => {
-    setBlocks(prev => prev.filter(b => b.id !== id));
+    setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
 
   const saveProject = () => {
     const project: EbookProject = { settings, blocks };
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(project, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `projeto-${settings.title.toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.download = `projeto-${settings.title.toLowerCase().replace(/\s+/g, "-")}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -209,31 +257,35 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const project = JSON.parse(event.target?.result as string) as EbookProject;
+        const project = JSON.parse(
+          event.target?.result as string,
+        ) as EbookProject;
         if (project.settings && project.blocks) {
           setSettings(project.settings);
           setBlocks(project.blocks);
-          showToast('Projeto JSON carregado com sucesso!', 'success');
+          showToast("Projeto JSON carregado com sucesso!", "success");
         }
       } catch (err) {
-        showToast('Erro ao carregar o projeto. Arquivo inválido.', 'error');
+        showToast("Erro ao carregar o projeto. Arquivo inválido.", "error");
       }
     };
     reader.readAsText(file);
-    e.target.value = '';
+    e.target.value = "";
   };
 
-  const handleHandoffUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHandoffUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       const text = await file.text();
       const parsedSettings = parseHandoffMarkdown(text);
-      
+
       const mergedSettings = {
         ...settings,
-        ...parsedSettings
+        ...parsedSettings,
       } as ProjectSettings;
       setSettings(mergedSettings);
 
@@ -241,37 +293,43 @@ export default function App() {
       const newRevision: LayoutRevision = {
         id: newRevId,
         filename: file.name,
-        uploadedAt: new Date().toLocaleString('pt-BR'),
+        uploadedAt: new Date().toLocaleString("pt-BR"),
         settings: mergedSettings,
-        rawContent: text
+        rawContent: text,
       };
 
-      setRevisions(prev => [newRevision, ...prev]);
+      setRevisions((prev) => [newRevision, ...prev]);
       setActiveRevisionId(newRevId);
-      
+
       if (handoffFileInputRef.current) {
-        handoffFileInputRef.current.value = '';
+        handoffFileInputRef.current.value = "";
       }
-      showToast('Definições visuais carregadas com sucesso!', 'success');
+      showToast("Definições visuais carregadas com sucesso!", "success");
     } catch (err) {
-      showToast('Erro ao processar as especificações do arquivo: ' + err, 'error');
+      showToast(
+        "Erro ao processar as especificações do arquivo: " + err,
+        "error",
+      );
     }
   };
 
   const applyRevision = (rev: LayoutRevision) => {
     setSettings(rev.settings);
     setActiveRevisionId(rev.id);
-    showToast(`Revisão "${rev.filename}" aplicada com sucesso!`, 'success');
+    showToast(`Revisão "${rev.filename}" aplicada com sucesso!`, "success");
   };
 
   const deleteRevision = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (id === activeRevisionId) {
-      showToast('Não é possível excluir a revisão atualmente ativa! Ative outra revisão primeiro.', 'error');
+      showToast(
+        "Não é possível excluir a revisão atualmente ativa! Ative outra revisão primeiro.",
+        "error",
+      );
       return;
     }
-    setRevisions(prev => prev.filter(r => r.id !== id));
-    showToast('Revisão excluída com sucesso!', 'success');
+    setRevisions((prev) => prev.filter((r) => r.id !== id));
+    showToast("Revisão excluída com sucesso!", "success");
   };
 
   const reprocessPreview = async () => {
@@ -279,26 +337,33 @@ export default function App() {
     try {
       // 1. Extract metadata from content
       const contentMetadata = extractMetadataFromContent(blocks);
-      
+
       // 2. Keep visual settings (from current settings) but ensure content variables are matched
       const merged = {
         ...settings,
-        ...contentMetadata
+        ...contentMetadata,
       };
-      
+
       setSettings(merged);
-      
+
       // If there are layouts or revisions, sync them too if active
       if (activeRevisionId) {
-        setRevisions(prev => prev.map(r => r.id === activeRevisionId ? { ...r, settings: merged } : r));
+        setRevisions((prev) =>
+          prev.map((r) =>
+            r.id === activeRevisionId ? { ...r, settings: merged } : r,
+          ),
+        );
       }
 
       // 3. Increment trigger to force a clean, single-pass async execution in useEffect
-      setReprocessTrigger(prev => prev + 1);
-      
-      showToast('Pré-visualização do PDF reprocessada e atualizada com sucesso!', 'success');
+      setReprocessTrigger((prev) => prev + 1);
+
+      showToast(
+        "Pré-visualização do PDF reprocessada e atualizada com sucesso!",
+        "success",
+      );
     } catch (err) {
-      showToast('Erro ao reprocessar a visualização: ' + err, 'error');
+      showToast("Erro ao reprocessar a visualização: " + err, "error");
     } finally {
       setIsGenerating(false);
     }
@@ -307,340 +372,669 @@ export default function App() {
   const clearAllData = () => {
     setSettings(DEFAULT_SETTINGS);
     setBlocks([]);
-    setParsedHtml('');
+    setParsedHtml("");
     setContentPages([]);
     setRevisions([]);
-    setActiveRevisionId('');
-    
+    setActiveRevisionId("");
+
     // Clear localStorage
-    localStorage.removeItem('ebook_layout_settings');
-    localStorage.removeItem('ebook_layout_blocks');
-    localStorage.removeItem('ebook_layout_revisions');
-    localStorage.removeItem('ebook_layout_active_id');
-    
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (handoffFileInputRef.current) handoffFileInputRef.current.value = '';
-    
-    showToast('Tudo limpo com sucesso! Pronto para processar o seu novo e-book.', 'success');
+    localStorage.removeItem("ebook_layout_settings");
+    localStorage.removeItem("ebook_layout_blocks");
+    localStorage.removeItem("ebook_layout_revisions");
+    localStorage.removeItem("ebook_layout_active_id");
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (handoffFileInputRef.current) handoffFileInputRef.current.value = "";
+
+    showToast(
+      "Tudo limpo com sucesso! Pronto para processar o seu novo e-book.",
+      "success",
+    );
     setShowClearConfirm(false);
   };
 
-  const printPdf = () => {
-    window.print();
+  const printPdf = async () => {
+    if (blocks.length === 0) {
+      showToast(
+        "Nenhum conteúdo para exportar. Por favor, adicione capítulos primeiro.",
+        "error",
+      );
+      return;
+    }
+
+    setIsExportingPdf(true);
+    showToast("Gerando PDF direto de alta fidelidade... Aguarde um momento.", "info");
+
+    try {
+      const { jsPDF } = await import("jspdf");
+      const html2canvas = (await import("html2canvas")).default;
+
+      // Find all `.page` elements in the exclusive offscreen render container
+      let container = document.getElementById("pdf-render-offscreen");
+      if (!container) {
+        // Fallback to searching the main preview if offscreen container isn't in DOM yet
+        container = document.querySelector(".ebook-preview-container") as HTMLElement;
+      }
+
+      if (!container) {
+        throw new Error("Contêiner de visualização não encontrado.");
+      }
+
+      const pages = container.querySelectorAll(".page");
+      if (pages.length === 0) {
+        throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
+      }
+
+      // Initialize A4 Portrait PDF: 210mm x 297mm
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      for (let i = 0; i < pages.length; i++) {
+        const pageEl = pages[i] as HTMLElement;
+        
+        // Show progress toast
+        if (pages.length > 2) {
+          showToast(`Exportando página ${i + 1} de ${pages.length}...`, "info");
+        }
+
+        const canvas = await html2canvas(pageEl, {
+          scale: 2, // high quality
+          useCORS: true,
+          logging: false,
+          allowTaint: true,
+          backgroundColor: settings.backgroundColor || "#FAF8F4",
+          // Force fixed layout dimensions for perfect page cuts matching CSS
+          windowWidth: 794,  // 210mm in pixels at 96 DPI
+          windowHeight: 1123, // 297mm in pixels at 96 DPI
+        });
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+        if (i > 0) {
+          doc.addPage();
+        }
+
+        // Add to page
+        doc.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+      }
+
+      // Format filename using settings.title
+      const rawTitle = settings.title || "Ebook";
+      const sanitizedTitle = rawTitle
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/gi, "_")
+        .substring(0, 40) || "ebook";
+
+      doc.save(`${sanitizedTitle}.pdf`);
+      showToast("E-book exportado para PDF com de absoluto sucesso!", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Ocorreu um erro ao exportar: ${err.message || err}`, "error");
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col print:bg-white print:m-0">
-      
       {/* HEADER (No Print) */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between no-print sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded bg-[#245C5A] flex items-center justify-center">
-             <LayoutTemplate size={18} className="text-[#F4EFE7]" />
+            <LayoutTemplate size={18} className="text-[#F4EFE7]" />
           </div>
-          <h1 className="text-xl font-display font-semibold text-[#2F3437]">Gerador de E-books Conexão Seres</h1>
+          <h1 className="text-xl font-display font-semibold text-[#2F3437]">
+            Gerador de E-books Conexão Seres
+          </h1>
         </div>
-        
+
         <div className="flex bg-gray-100 p-1 rounded-lg">
-          <button 
-            onClick={() => setActiveTab('content')}
-            className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${activeTab === 'content' ? 'bg-white shadow-sm text-[#245C5A]' : 'text-gray-600 hover:text-gray-900'}`}
+          <button
+            onClick={() => setActiveTab("content")}
+            className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${activeTab === "content" ? "bg-white shadow-sm text-[#245C5A]" : "text-gray-600 hover:text-gray-900"}`}
           >
             <FileText size={16} className="inline mr-2" /> Conteúdo
           </button>
-          <button 
-            onClick={() => setActiveTab('preview')}
-            className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${activeTab === 'preview' ? 'bg-white shadow-sm text-[#245C5A]' : 'text-gray-600 hover:text-gray-900'}`}
+          <button
+            onClick={() => setActiveTab("preview")}
+            className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${activeTab === "preview" ? "bg-white shadow-sm text-[#245C5A]" : "text-gray-600 hover:text-gray-900"}`}
           >
-            <CheckCircle size={16} className="inline mr-2" /> Pré-visualização & PDF
+            <CheckCircle size={16} className="inline mr-2" /> Pré-visualização &
+            PDF
           </button>
         </div>
 
         <div className="flex items-center gap-2">
-           <button 
-             onClick={() => setShowClearConfirm(true)}
-             className="px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors border border-red-200"
-             title="Limpar todos os dados e começar um novo e-book"
-           >
-             <Trash2 size={16} className="inline mr-2" /> Limpar Tudo
-           </button>
-           <label className="cursor-pointer px-3 py-2 text-sm font-medium text-[#245C5A] hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
-             <Upload size={16} className="inline mr-2" /> Carregar JSON
-             <input type="file" accept=".json" className="hidden" onChange={loadProject} />
-           </label>
-           <button onClick={saveProject} className="px-3 py-2 text-sm font-medium text-[#245C5A] hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
-             <Download size={16} className="inline mr-2" /> Salvar JSON
-           </button>
-           <button onClick={printPdf} className="px-4 py-2 text-sm font-bold text-white bg-[#245C5A] hover:bg-[#1b4342] rounded-md transition-colors shadow-sm">
-             Exportar PDF
-           </button>
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors border border-red-200"
+            title="Limpar todos os dados e começar um novo e-book"
+          >
+            <Trash2 size={16} className="inline mr-2" /> Limpar Tudo
+          </button>
+          <label className="cursor-pointer px-3 py-2 text-sm font-medium text-[#245C5A] hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
+            <Upload size={16} className="inline mr-2" /> Carregar JSON
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={loadProject}
+            />
+          </label>
+          <button
+            onClick={saveProject}
+            className="px-3 py-2 text-sm font-medium text-[#245C5A] hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
+          >
+            <Download size={16} className="inline mr-2" /> Salvar JSON
+          </button>
+          <button
+            onClick={printPdf}
+            disabled={blocks.length === 0 || isExportingPdf}
+            className="px-4 py-2 text-sm font-bold text-white bg-[#245C5A] hover:bg-[#1b4342] rounded-md transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            title={
+              blocks.length === 0
+                ? "Adicione conteúdo antes de exportar"
+                : isExportingPdf
+                  ? "Exportando PDF..."
+                  : "Exportar para PDF (A4)"
+            }
+          >
+            {isExportingPdf ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" />
+                Gerando...
+              </>
+            ) : (
+              "Exportar PDF"
+            )}
+          </button>
         </div>
       </header>
 
       {/* MAIN CONTENT */}
       <main className="flex-1 overflow-auto p-6 no-print">
         <div className="max-w-7xl mx-auto">
-          
           {/* TAB: CONTENT UPLOAD */}
-          {activeTab === 'content' && (
+          {activeTab === "content" && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-               
-               {/* LEFT/MAIN SECTION: CONTENT CHUNKS (7 columns) */}
-               <div className="lg:col-span-7 space-y-6">
-                  <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
-                     <div className="w-16 h-16 bg-[#F4EFE7] text-[#245C5A] rounded-full flex items-center justify-center mx-auto mb-4">
-                        <FileText size={32} />
-                     </div>
-                     <h2 className="text-xl font-display font-semibold text-[#2F3437] mb-2">Importar Arquivos de Conteúdo</h2>
-                     <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                       Selecione arquivos .md ou .txt contendo o texto do e-book. Eles são limpos automaticamente de marcadores técnicos obsoletos ou de distribuição.
-                     </p>
-                     
-                     <div className="flex justify-center gap-3">
-                        <label id="upload-content-btn" className="cursor-pointer bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm inline-flex items-center">
-                          <Upload size={16} className="mr-2" /> Upload de Capítulos
-                          <input type="file" multiple accept=".md,.txt" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-                        </label>
-                        <button id="add-manual-btn" onClick={addManualBlock} className="bg-white border-2 border-[#245C5A] text-[#245C5A] hover:bg-gray-50 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors inline-flex items-center">
-                          <Plus size={16} className="mr-2" /> Bloco Manual
-                        </button>
-                     </div>
+              {/* LEFT/MAIN SECTION: CONTENT CHUNKS (7 columns) */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
+                  <div className="w-16 h-16 bg-[#F4EFE7] text-[#245C5A] rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText size={32} />
+                  </div>
+                  <h2 className="text-xl font-display font-semibold text-[#2F3437] mb-2">
+                    Importar Arquivos de Conteúdo
+                  </h2>
+                  <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+                    Selecione arquivos .md ou .txt contendo o texto do e-book.
+                    Eles são limpos automaticamente de marcadores técnicos
+                    obsoletos ou de distribuição.
+                  </p>
+
+                  <div className="flex justify-center gap-3">
+                    <label
+                      id="upload-content-btn"
+                      className="cursor-pointer bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm inline-flex items-center"
+                    >
+                      <Upload size={16} className="mr-2" /> Upload de Capítulos
+                      <input
+                        type="file"
+                        multiple
+                        accept=".md,.txt"
+                        className="hidden"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                    <button
+                      id="add-manual-btn"
+                      onClick={addManualBlock}
+                      className="bg-white border-2 border-[#245C5A] text-[#245C5A] hover:bg-gray-50 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors inline-flex items-center"
+                    >
+                      <Plus size={16} className="mr-2" /> Bloco Manual
+                    </button>
+                  </div>
+                </div>
+
+                {blocks.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-display font-semibold text-[#2F3437] flex items-center justify-between border-b border-gray-100 pb-2">
+                      <span>
+                        Ordem e Sequenciamento ({blocks.length} blocos)
+                      </span>
+                    </h3>
+
+                    {blocks.map((block, index) => (
+                      <div
+                        key={block.id}
+                        className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+                      >
+                        <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-1 rounded">
+                              #{index + 1}
+                            </div>
+                            <span className="font-medium text-[#2F3437] text-sm">
+                              {block.filename}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => removeBlock(block.id)}
+                            className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
+                            title="Remover bloco"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <div className="p-0">
+                          <textarea
+                            value={block.content}
+                            onChange={(e) =>
+                              updateBlockContent(block.id, e.target.value)
+                            }
+                            className="w-full h-40 focus:ring-0 border-0 p-4 font-mono text-xs resize-y text-gray-700 bg-white"
+                            placeholder="Insira ou comente o markdown do capítulo aqui..."
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* RIGHT/SIDEBAR SECTION: DESIGN & SPECS MARKDOWN SYNC (5 columns) */}
+              <div className="lg:col-span-5 space-y-6">
+                {/* SPECIFICATION SYNC CARD */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2 text-[#245C5A] mb-3">
+                    <Palette size={20} />
+                    <h3 className="text-lg font-display font-semibold">
+                      Configuração Visual (.md)
+                    </h3>
                   </div>
 
-                  {blocks.length > 0 && (
-                    <div className="space-y-4">
-                       <h3 className="text-lg font-display font-semibold text-[#2F3437] flex items-center justify-between border-b border-gray-100 pb-2">
-                          <span>Ordem e Sequenciamento ({blocks.length} blocos)</span>
-                       </h3>
-                       
-                       {blocks.map((block, index) => (
-                         <div key={block.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                           <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
-                              <div className="flex items-center gap-3">
-                                <div className="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-1 rounded">#{index + 1}</div>
-                                <span className="font-medium text-[#2F3437] text-sm">{block.filename}</span>
-                              </div>
-                              <button onClick={() => removeBlock(block.id)} className="text-red-500 hover:text-red-700 p-1 rounded transition-colors" title="Remover bloco">
-                                <Trash2 size={16} />
-                              </button>
-                           </div>
-                           <div className="p-0">
-                              <textarea 
-                                value={block.content}
-                                onChange={(e) => updateBlockContent(block.id, e.target.value)}
-                                className="w-full h-40 focus:ring-0 border-0 p-4 font-mono text-xs resize-y text-gray-700 bg-white"
-                                placeholder="Insira ou comente o markdown do capítulo aqui..."
-                              />
-                           </div>
-                         </div>
-                       ))}
+                  <p className="text-xs text-gray-500 mb-5 leading-relaxed">
+                    Importe um arquivo de especificações/handoff (como{" "}
+                    <code>EBOOK_VISUAL_HANDOFF.md</code>) para preencher os
+                    metadados, contatos, marca, autoria e avisos automáticos do
+                    e-book.
+                  </p>
+
+                  <div className="mb-6">
+                    <label
+                      id="upload-spec-btn"
+                      className="cursor-pointer bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-4 py-3 rounded-lg font-bold transition-colors shadow-xs inline-flex items-center justify-center w-full text-sm"
+                    >
+                      <Upload size={16} className="mr-2" /> Carregar
+                      Especificações Visual .md
+                      <input
+                        type="file"
+                        accept=".md,.txt"
+                        className="hidden"
+                        ref={handoffFileInputRef}
+                        onChange={handleHandoffUpload}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-4 space-y-3 hidden">
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      Parâmetros Carregados
+                    </h4>
+
+                    <div className="bg-[#FAF8F4] p-3 rounded-lg space-y-2 text-xs border border-gray-100 leading-relaxed text-gray-700">
+                      <div className="flex justify-between py-1 border-b border-gray-100">
+                        <span className="text-gray-400">Título:</span>
+                        <span
+                          className="font-semibold text-gray-800 text-right max-w-[200px] truncate"
+                          title={settings.title}
+                        >
+                          {settings.title || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-100">
+                        <span className="text-gray-400">Subtítulo:</span>
+                        <span
+                          className="font-semibold text-gray-800 text-right max-w-[200px] truncate"
+                          title={settings.subtitle}
+                        >
+                          {settings.subtitle || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-100">
+                        <span className="text-gray-400">Marca:</span>
+                        <span className="font-semibold text-gray-800 text-right truncate">
+                          {settings.brand || "Não importada"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-100">
+                        <span className="text-gray-400">Nome Autoria:</span>
+                        <span className="font-semibold text-gray-800 text-right truncate">
+                          {settings.professionalName || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-100">
+                        <span className="text-gray-400">
+                          Título Profissional:
+                        </span>
+                        <span
+                          className="font-semibold text-gray-500 text-right truncate text-[11px]"
+                          title={settings.professionalTitle}
+                        >
+                          {settings.professionalTitle || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-100">
+                        <span className="text-gray-400">
+                          Registro Profissional:
+                        </span>
+                        <span className="font-semibold text-[#8A4D3B] text-right truncate">
+                          {settings.professionalReg || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-gray-400">Site Oficial:</span>
+                        <span className="font-semibold text-[#245C5A] text-right truncate">
+                          {settings.website || "Não importado"}
+                        </span>
+                      </div>
                     </div>
-                  )}
-               </div>
+                  </div>
+                </div>
 
-               {/* RIGHT/SIDEBAR SECTION: DESIGN & SPECS MARKDOWN SYNC (5 columns) */}
-               <div className="lg:col-span-5 space-y-6">
-                  
-                  {/* SPECIFICATION SYNC CARD */}
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                     <div className="flex items-center gap-2 text-[#245C5A] mb-3">
-                       <Palette size={20} />
-                       <h3 className="text-lg font-display font-semibold">Configuração Visual (.md)</h3>
-                     </div>
-                     
-                     <p className="text-xs text-gray-500 mb-5 leading-relaxed">
-                       Importe um arquivo de especificações/handoff (como <code>EBOOK_VISUAL_HANDOFF.md</code>) para preencher os metadados, contatos, marca, autoria e avisos automáticos do e-book.
-                     </p>
-                     
-                     <div className="mb-6">
-                       <label id="upload-spec-btn" className="cursor-pointer bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-4 py-3 rounded-lg font-bold transition-colors shadow-xs inline-flex items-center justify-center w-full text-sm">
-                         <Upload size={16} className="mr-2" /> Carregar Especificações Visual .md
-                         <input type="file" accept=".md,.txt" className="hidden" ref={handoffFileInputRef} onChange={handleHandoffUpload} />
-                       </label>
-                     </div>
-
-                     <div className="border-t border-gray-100 pt-4 space-y-3 hidden">
-                       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Parâmetros Carregados</h4>
-                       
-                       <div className="bg-[#FAF8F4] p-3 rounded-lg space-y-2 text-xs border border-gray-100 leading-relaxed text-gray-700">
-                         <div className="flex justify-between py-1 border-b border-gray-100">
-                           <span className="text-gray-400">Título:</span>
-                           <span className="font-semibold text-gray-800 text-right max-w-[200px] truncate" title={settings.title}>{settings.title || 'Não importado'}</span>
-                         </div>
-                         <div className="flex justify-between py-1 border-b border-gray-100">
-                           <span className="text-gray-400">Subtítulo:</span>
-                           <span className="font-semibold text-gray-800 text-right max-w-[200px] truncate" title={settings.subtitle}>{settings.subtitle || 'Não importado'}</span>
-                         </div>
-                         <div className="flex justify-between py-1 border-b border-gray-100">
-                           <span className="text-gray-400">Marca:</span>
-                           <span className="font-semibold text-gray-800 text-right truncate">{settings.brand || 'Não importada'}</span>
-                         </div>
-                         <div className="flex justify-between py-1 border-b border-gray-100">
-                           <span className="text-gray-400">Nome Autoria:</span>
-                           <span className="font-semibold text-gray-800 text-right truncate">{settings.professionalName || 'Não importado'}</span>
-                         </div>
-                         <div className="flex justify-between py-1 border-b border-gray-100">
-                           <span className="text-gray-400">Título Profissional:</span>
-                           <span className="font-semibold text-gray-500 text-right truncate text-[11px]" title={settings.professionalTitle}>{settings.professionalTitle || 'Não importado'}</span>
-                         </div>
-                         <div className="flex justify-between py-1 border-b border-gray-100">
-                           <span className="text-gray-400">Registro Profissional:</span>
-                           <span className="font-semibold text-[#8A4D3B] text-right truncate">{settings.professionalReg || 'Não importado'}</span>
-                         </div>
-                         <div className="flex justify-between py-1">
-                           <span className="text-gray-400">Site Oficial:</span>
-                           <span className="font-semibold text-[#245C5A] text-right truncate">{settings.website || 'Não importado'}</span>
-                         </div>
-                       </div>
-                     </div>
+                {/* REVISIONS HISTORY CARD */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-[#245C5A]">
+                      <History size={20} />
+                      <h3 className="text-lg font-display font-semibold">
+                        Histórico de Versões
+                      </h3>
+                    </div>
+                    <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {revisions.length} arquivos
+                    </span>
                   </div>
 
-                  {/* REVISIONS HISTORY CARD */}
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                     <div className="flex items-center justify-between mb-4">
-                       <div className="flex items-center gap-2 text-[#245C5A]">
-                         <History size={20} />
-                         <h3 className="text-lg font-display font-semibold">Histórico de Versões</h3>
-                       </div>
-                       <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{revisions.length} arquivos</span>
-                     </div>
+                  <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+                    Selecione ou alterne livremente entre as versões dos
+                    arquivos de design carregados na sessão. As configurações do
+                    PDF serão recarregadas instantaneamente.
+                  </p>
 
-                     <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                       Selecione ou alterne livremente entre as versões dos arquivos de design carregados na sessão. As configurações do PDF serão recarregadas instantaneamente.
-                     </p>
+                  <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                    {revisions.map((rev) => {
+                      const isActive = rev.id === activeRevisionId;
+                      return (
+                        <div
+                          key={rev.id}
+                          onClick={() => applyRevision(rev)}
+                          className={`group relative p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-[#DDE8E5] border-[#245C5A] shadow-xs"
+                              : "bg-white border-gray-100 hover:border-gray-200"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between pr-4">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5">
+                                <FileText
+                                  size={14}
+                                  className={
+                                    isActive
+                                      ? "text-[#245C5A]"
+                                      : "text-gray-400"
+                                  }
+                                />
+                                <span
+                                  className={`text-sm font-semibold truncate block max-w-[170px] ${isActive ? "text-[#245C5A] font-bold" : "text-gray-700"}`}
+                                >
+                                  {rev.filename}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-gray-400 font-mono">
+                                Importado em: {rev.uploadedAt}
+                              </p>
+                            </div>
 
-                     <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-                       {revisions.map((rev) => {
-                         const isActive = rev.id === activeRevisionId;
-                         return (
-                           <div 
-                             key={rev.id} 
-                             onClick={() => applyRevision(rev)}
-                             className={`group relative p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                               isActive 
-                                 ? 'bg-[#DDE8E5] border-[#245C5A] shadow-xs' 
-                                 : 'bg-white border-gray-100 hover:border-gray-200'
-                             }`}
-                           >
-                             <div className="flex items-start justify-between pr-4">
-                               <div className="space-y-1">
-                                 <div className="flex items-center gap-1.5">
-                                   <FileText size={14} className={isActive ? 'text-[#245C5A]' : 'text-gray-400'} />
-                                   <span className={`text-sm font-semibold truncate block max-w-[170px] ${isActive ? 'text-[#245C5A] font-bold' : 'text-gray-700'}`}>
-                                     {rev.filename}
-                                   </span>
-                                 </div>
-                                 <p className="text-[10px] text-gray-400 font-mono">
-                                   Importado em: {rev.uploadedAt}
-                                 </p>
-                               </div>
+                            {isActive ? (
+                              <span className="text-[10px] bg-[#245C5A] text-white px-2 py-0.5 rounded font-mono uppercase font-bold tracking-wider shrink-0 ml-1">
+                                Ativo
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => deleteRevision(rev.id, e)}
+                                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 p-1 rounded-md"
+                                title="Excluir do histórico"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
 
-                               {isActive ? (
-                                 <span className="text-[10px] bg-[#245C5A] text-white px-2 py-0.5 rounded font-mono uppercase font-bold tracking-wider shrink-0 ml-1">
-                                   Ativo
-                                 </span>
-                               ) : (
-                                 <button 
-                                   onClick={(e) => deleteRevision(rev.id, e)}
-                                   className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 p-1 rounded-md"
-                                   title="Excluir do histórico"
-                                 >
-                                   <Trash2 size={14} />
-                                 </button>
-                               )}
-                             </div>
-                           </div>
-                         );
-                       })}
-                       
-                       {revisions.length === 0 && (
-                         <div className="text-center py-6 text-gray-400 text-sm">
-                           Nenhuma versão anterior cadastrada.
-                         </div>
-                       )}
-                     </div>
+                    {revisions.length === 0 && (
+                      <div className="text-center py-6 text-gray-400 text-sm">
+                        Nenhuma versão anterior cadastrada.
+                      </div>
+                    )}
                   </div>
-
-               </div>
-               
+                </div>
+              </div>
             </div>
           )}
 
           {/* TAB: PREVIEW & EXPORT */}
-          {activeTab === 'preview' && (
-             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
-                {/* CHECKLIST */}
-                <div className="bg-[#FAF8F4] border border-[#C9D8D5] p-6 rounded-xl shadow-sm mb-8">
-                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                     <h3 className="text-lg font-display font-bold text-[#245C5A] flex items-center">
-                       <CheckCircle className="mr-2" /> Opções de Exportação
-                     </h3>
-                     
-                     <div className="mt-4 sm:mt-0 flex flex-wrap items-end justify-end gap-3" id="export-controls-container">
-                        <span className="hidden"></span><div className="flex items-center gap-2 bg-white border border-gray-300 px-3 py-1.5 rounded-md h-[40px] shadow-xs hover:border-[#245C5A] transition-colors"><input type="checkbox" id="generate-toc-checkbox" checked={settings.generateToc !== false} onChange={e => setSettings({...settings, generateToc: e.target.checked})} className="w-4 h-4 text-[#245C5A] focus:ring-[#245C5A] border-gray-300 rounded cursor-pointer animate-pulse" /><label htmlFor="generate-toc-checkbox" className="text-xs font-bold text-[#245C5A] cursor-pointer select-none">Página de Sumário</label></div><div className="flex flex-col items-start text-left" id="select-wrap-inner-group"><label className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Modo de Distribuição (Páginas)</label>
-                        <select value={settings.densityMode} onChange={e => setSettings({...settings, densityMode: e.target.value as any})} className="border border-gray-300 rounded-md p-2 focus:ring-[#245C5A] focus:border-[#245C5A] text-sm bg-white" id="density-select-el">
-                           <option value="compact">Compacto (menos páginas)</option>
-                           <option value="comfortable">Confortável (padrão)</option>
-                           <option value="premium">Premium (mais respiro)</option>
-                        </select></div>
-                     </div>
-                   </div>
+          {activeTab === "preview" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {/* CHECKLIST */}
+              <div className="bg-[#FAF8F4] border border-[#C9D8D5] p-6 rounded-xl shadow-sm mb-8">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                  <h3 className="text-lg font-display font-bold text-[#245C5A] flex items-center">
+                    <CheckCircle className="mr-2" /> Opções de Exportação
+                  </h3>
 
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#2F3437]">
-                     <div className="flex items-center gap-2"><CheckCircle size={16} className={blocks.length > 0 ? 'text-green-600' : 'text-gray-300'} /> Conteúdo importado</div>
-                     <div className="flex items-center gap-2"><CheckCircle size={16} className={parsedHtml.toLowerCase().includes('aviso importante') || parsedHtml.toLowerCase().includes('aviso educativo') ? 'text-green-600' : 'text-yellow-500'} /> Aviso Educativo detectado no texto</div>
-                     
-                     {/* Check for remaining 'Parte 1' artifacts */}
-                     {parsedHtml.match(/Parte\s+\d+/i) ? (
-                        <div className="flex items-center gap-2 text-red-600 font-medium col-span-1 sm:col-span-2 mt-2">
-                           <AlertTriangle size={16} /> Atenção: O texto ainda pode conter menções residuais como "Parte 1". Verifique.
-                        </div>
-                     ) : (
-                        <div className="flex items-center gap-2 col-span-1 sm:col-span-2 mt-2">
-                           <CheckCircle size={16} className="text-green-600" /> Nenhuma marcação técnica (Parte 1/Bloco 1) aparente encontrada.
-                        </div>
-                     )}
-                   </div>
-                   
-                   <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                     <button onClick={printPdf} className="flex-1 bg-[#245C5A] text-white py-3 rounded-lg font-bold hover:bg-[#1b4342] transition-colors shadow-sm flex justify-center items-center">
-                        <Download size={20} className="mr-2" /> Exportar para PDF (A4)
-                     </button>
-                     <button onClick={reprocessPreview} className="flex-1 bg-white border-2 border-[#245C5A] text-[#245C5A] hover:bg-gray-50 py-3 rounded-lg font-bold transition-colors shadow-sm flex justify-center items-center">
-                        <RefreshCw size={20} className={`mr-2 ${isGenerating ? 'animate-spin' : ''}`} /> Reprocessar Pré-visualização do PDF
-                     </button>
-                   </div>
-                   <p className="text-xs text-gray-500 mt-3 text-center">Para gerar o PDF: Selecione 'Salvar como PDF', Tamanho A4, Margens Nenhuma e Ative Gráficos de Fundo.</p>
+                  <div
+                    className="mt-4 sm:mt-0 flex flex-wrap items-end justify-end gap-3"
+                    id="export-controls-container"
+                  >
+                    <span className="hidden"></span>
+                    <div className="flex items-center gap-2 bg-white border border-gray-300 px-3 py-1.5 rounded-md h-[40px] shadow-xs hover:border-[#245C5A] transition-colors">
+                      <input
+                        type="checkbox"
+                        id="generate-toc-checkbox"
+                        checked={settings.generateToc !== false}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            generateToc: e.target.checked,
+                          })
+                        }
+                        className="w-4 h-4 text-[#245C5A] focus:ring-[#245C5A] border-gray-300 rounded cursor-pointer animate-pulse"
+                      />
+                      <label
+                        htmlFor="generate-toc-checkbox"
+                        className="text-xs font-bold text-[#245C5A] cursor-pointer select-none"
+                      >
+                        Página de Sumário
+                      </label>
+                    </div>
+                    <div
+                      className="flex flex-col items-start text-left"
+                      id="select-wrap-inner-group"
+                    >
+                      <label className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">
+                        Modo de Distribuição (Páginas)
+                      </label>
+                      <select
+                        value={settings.densityMode}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            densityMode: e.target.value as any,
+                          })
+                        }
+                        className="border border-gray-300 rounded-md p-2 focus:ring-[#245C5A] focus:border-[#245C5A] text-sm bg-white"
+                        id="density-select-el"
+                      >
+                        <option value="compact">
+                          Compacto (menos páginas)
+                        </option>
+                        <option value="comfortable">
+                          Confortável (padrão)
+                        </option>
+                        <option value="premium">Premium (mais respiro)</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 p-4 rounded-xl text-center">
-                   <p className="text-sm text-gray-500">Preview visual simulando A4.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#2F3437]">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle
+                      size={16}
+                      className={
+                        blocks.length > 0 ? "text-green-600" : "text-gray-300"
+                      }
+                    />{" "}
+                    Conteúdo importado
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle
+                      size={16}
+                      className={
+                        parsedHtml.toLowerCase().includes("aviso importante") ||
+                        parsedHtml.toLowerCase().includes("aviso educativo")
+                          ? "text-green-600"
+                          : "text-yellow-500"
+                      }
+                    />{" "}
+                    Aviso Educativo detectado no texto
+                  </div>
+
+                  {/* Check for remaining 'Parte 1' artifacts */}
+                  {parsedHtml.match(/Parte\s+\d+/i) ? (
+                    <div className="flex items-center gap-2 text-red-600 font-medium col-span-1 sm:col-span-2 mt-2">
+                      <AlertTriangle size={16} /> Atenção: O texto ainda pode
+                      conter menções residuais como "Parte 1". Verifique.
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 col-span-1 sm:col-span-2 mt-2">
+                      <CheckCircle size={16} className="text-green-600" />{" "}
+                      Nenhuma marcação técnica (Parte 1/Bloco 1) aparente
+                      encontrada.
+                    </div>
+                  )}
                 </div>
-             </div>
+
+                <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                  <button
+                    onClick={printPdf}
+                    disabled={blocks.length === 0 || isExportingPdf}
+                    className="flex-1 bg-[#245C5A] text-white py-3 rounded-lg font-bold hover:bg-[#1b4342] transition-colors shadow-sm flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      blocks.length === 0
+                        ? "Adicione conteúdo antes de exportar"
+                        : isExportingPdf
+                          ? "Exportando PDF..."
+                          : "Exportar para PDF (A4)"
+                    }
+                  >
+                    {isExportingPdf ? (
+                      <>
+                        <RefreshCw size={20} className="mr-2 animate-spin" />
+                        Gerando PDF direto (A4)...
+                      </>
+                    ) : (
+                      <>
+                        <Download size={20} className="mr-2" /> Exportar para
+                        PDF (A4)
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={reprocessPreview}
+                    disabled={blocks.length === 0 || isGenerating}
+                    className="flex-1 bg-white border-2 border-[#245C5A] text-[#245C5A] hover:bg-gray-50 py-3 rounded-lg font-bold transition-colors shadow-sm flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      blocks.length === 0
+                        ? "Adicione conteúdo antes de reprocessar"
+                        : "Reprocessar Pré-visualização do PDF"
+                    }
+                  >
+                    <RefreshCw
+                      size={20}
+                      className={`mr-2 ${isGenerating ? "animate-spin" : ""}`}
+                    />{" "}
+                    Reprocessar Pré-visualização do PDF
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-3 text-center">
+                  Para gerar o PDF: Selecione 'Salvar como PDF', Tamanho A4,
+                  Margens Nenhuma e Ative Gráficos de Fundo.
+                </p>
+              </div>
+
+              <div className="bg-white border border-gray-200 p-4 rounded-xl text-center">
+                <p className="text-sm text-gray-500">
+                  Preview visual simulando A4.
+                </p>
+              </div>
+            </div>
           )}
         </div>
       </main>
 
       {/* RENDER PREVIEW EXACTLY FOR PRINT OR WHEN IN PREVIEW TAB */}
-      <div className={`${activeTab === 'preview' ? 'block' : 'hidden print:block'}`}>
-          <EbookPreview settings={settings} contentPages={contentPages} />
+      <div
+        className={`${activeTab === "preview" ? "block" : "hidden print:block"}`}
+      >
+        <EbookPreview settings={settings} contentPages={contentPages} />
+      </div>
+
+      {/* Container invisível exclusivo para renderização e exportação direta de PDF */}
+      <div
+        id="pdf-render-offscreen"
+        style={{
+          position: "fixed",
+          left: "-9999px",
+          top: 0,
+          width: "210mm",
+          zIndex: -1000,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      >
+        <EbookPreview settings={settings} contentPages={contentPages} />
       </div>
 
       {/* GLOBAL NOTIFICATION TOAST */}
       {notification && (
-        <div className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-sm max-w-md animate-in slide-in-from-bottom-5 fade-in duration-300 no-print ${
-          notification.type === 'success' 
-            ? 'bg-[#E6F4EA] border-[#A3E5B7] text-[#137333]' 
-            : notification.type === 'error'
-            ? 'bg-[#FCE8E6] border-[#FAD2CF] text-[#C5221F]'
-            : 'bg-[#E8F0FE] border-[#C2E7FF] text-[#1A73E8]'
-        }`}>
-          {notification.type === 'success' && <CheckCircle size={18} />}
-          {notification.type === 'error' && <AlertCircle size={18} />}
-          {notification.type === 'info' && <BookOpen size={18} />}
+        <div
+          className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-sm max-w-md animate-in slide-in-from-bottom-5 fade-in duration-300 no-print ${
+            notification.type === "success"
+              ? "bg-[#E6F4EA] border-[#A3E5B7] text-[#137333]"
+              : notification.type === "error"
+                ? "bg-[#FCE8E6] border-[#FAD2CF] text-[#C5221F]"
+                : "bg-[#E8F0FE] border-[#C2E7FF] text-[#1A73E8]"
+          }`}
+        >
+          {notification.type === "success" && <CheckCircle size={18} />}
+          {notification.type === "error" && <AlertCircle size={18} />}
+          {notification.type === "info" && <BookOpen size={18} />}
           <span className="font-medium font-sans">{notification.message}</span>
-          <button 
+          <button
             onClick={() => setNotification(null)}
             className="ml-2 hover:opacity-75 transition-opacity"
           >
@@ -655,21 +1049,26 @@ export default function App() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 text-red-600 mb-4">
               <AlertTriangle size={32} className="shrink-0" />
-              <h3 className="text-lg font-display font-bold text-gray-900">Limpar tudo e começar de novo?</h3>
+              <h3 className="text-lg font-display font-bold text-gray-900">
+                Limpar tudo e começar de novo?
+              </h3>
             </div>
             <p className="text-sm text-gray-600 leading-relaxed mb-6">
-              Esta ação irá **remover permanentemente** todo o e-book atualmente carregado, suas revisões de layout e todas as definições visuais customizadas, resetando tudo para os valores iniciais.
-              <br /><br />
+              Esta ação irá **remover permanentemente** todo o e-book atualmente
+              carregado, suas revisões de layout e todas as definições visuais
+              customizadas, resetando tudo para os valores iniciais.
+              <br />
+              <br />
               Deseja realmente continuar?
             </p>
             <div className="flex gap-3 justify-end">
-              <button 
+              <button
                 onClick={() => setShowClearConfirm(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={clearAllData}
                 className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-1.5"
               >
@@ -679,8 +1078,6 @@ export default function App() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
-

@@ -54,7 +54,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     }
   });
 
-  // Filter out sections that are treated as standalone high-fidelity dedicated pages (Aviso / CTA / Contatos)
+  // Filter out sections that are treated as standalone high-fidelity dedicated pages (Aviso / CTA / Contatos / Sumário)
   // so they are not duplicated in the main flow
   const allHeadings = doc.querySelectorAll('h1, h2, h3, h4');
   allHeadings.forEach((heading) => {
@@ -69,7 +69,13 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
       text.includes('fale conosco') || 
       text.includes('fale com a conexão seres') || 
       text.includes('sobre o agendamento') || 
-      text.includes('cta')
+      text.includes('cta') ||
+      text.includes('sumário') ||
+      text.includes('sumario') ||
+      text.includes('índice') ||
+      text.includes('indice') ||
+      text.includes('table of contents') ||
+      text.includes('table of content')
     ) {
       removeNextUntilHeading(heading);
     }
@@ -236,7 +242,7 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
 
   // Title
   if (!result.title) {
-    const titleMatch = findValueInLines(/^#\s+(?!aviso|cta|conexão|chamada|um convite|conteúdo|parte|bloco)(.*)$/i);
+    const titleMatch = findValueInLines(/^#\s+(?!aviso|cta|conexão|chamada|um convite|conteúdo|parte|bloco|sumário|sumario|índice|indice|index|table of contents)(.*)$/i);
     if (titleMatch) {
       result.title = titleMatch;
       result.shortTitle = titleMatch;
@@ -245,7 +251,7 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
 
   // Subtitle
   if (!result.subtitle) {
-    const subtitleHeading = findValueInLines(/^##\s+(?!aviso|cta|conexão|chamada|um convite|capítulo|parte|bloco)(.*)$/i);
+    const subtitleHeading = findValueInLines(/^##\s+(?!aviso|cta|conexão|chamada|um convite|capítulo|parte|bloco|sumário|sumario|índice|indice|index|table of contents)(.*)$/i);
     if (subtitleHeading) {
       result.subtitle = subtitleHeading;
     } else {
