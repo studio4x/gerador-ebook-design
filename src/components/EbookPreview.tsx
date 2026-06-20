@@ -413,9 +413,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     if (isCoverOrFirstPage) return null;
     let headerTextVal = settings.headerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'Livro Digital'}`;
     
-    // Dynamic chapter name inclusion if descriptiveHeader is enabled
-    if (settings.descriptiveHeader !== false && pageIdx !== undefined && pageChapterTitles[pageIdx]) {
-      headerTextVal = `${headerTextVal} | ${pageChapterTitles[pageIdx]}`;
+    // As per user request, header should be the chapter title context
+    if (pageIdx !== undefined && pageChapterTitles[pageIdx]) {
+      headerTextVal = pageChapterTitles[pageIdx];
     }
 
     const alignment = settings.headerStyle || 'left';

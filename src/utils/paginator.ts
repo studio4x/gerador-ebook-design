@@ -151,9 +151,30 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     }
 
     if (shouldBreakBefore) {
-      pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
-      currentPageNodes = [];
-      currentHeightUnits = 0;
+      // Check for orphan headings at the end of the page
+      const orphanNodes: Element[] = [];
+      while (currentPageNodes.length > 0) {
+        const lastNode = currentPageNodes[currentPageNodes.length - 1];
+        const lastTagName = lastNode.tagName.toLowerCase();
+        if (['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName)) {
+          // It's a heading! We cannot leave it alone at the bottom of the page.
+          orphanNodes.unshift(currentPageNodes.pop()!);
+          // Note: we don't bother adjusting currentHeightUnits since we reset it anyway
+        } else {
+          break; // Not a heading, stop popping
+        }
+      }
+
+      if (currentPageNodes.length > 0) {
+          pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
+      }
+      
+      currentPageNodes = [...orphanNodes];
+      // Recalculate height for the orphans we carried over
+      currentHeightUnits = orphanNodes.reduce((acc, n) => {
+          const t = n.tagName.toLowerCase();
+          return acc + (t === 'h1' ? 50 : t === 'h2' ? 30 : 25);
+      }, 0);
     }
     
     currentPageNodes.push(node);

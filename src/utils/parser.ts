@@ -81,13 +81,44 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     }
   });
 
+  // Remove instructions that GPT includes incorrectly
+  const instructionsRegex = /inter regular|inter medium|inter bold|fonte recomendada|instalação de design|nota de design|instruções para o design|^\\*\\*\\s*instruções/i;
+  
+  const paragraphs = doc.querySelectorAll('p, blockquote, em, strong, div');
+  paragraphs.forEach((p) => {
+    const text = p.textContent?.trim().toLowerCase() || '';
+    if (
+        instructionsRegex.test(text) || 
+        text.startsWith('** inter') ||
+        text.startsWith('**fonte') ||
+        text.startsWith('**nota')
+    ) {
+        // If it's a short instruction paragraph (less than 150 chars), remove it
+        if (text.length < 150) {
+            p.remove();
+        }
+    }
+  });
+
   // Blockquotes -> frase-central
   const blockquotes = doc.querySelectorAll('blockquote');
   blockquotes.forEach((bq) => {
-      const p = doc.createElement('p');
-      p.className = 'frase-central';
-      p.innerHTML = bq.innerHTML;
-      bq.parentNode?.replaceChild(p, bq);
+      const div = doc.createElement('div');
+      div.className = 'frase-central';
+      
+      // Clean up empty paragraphs or brs inside blockquote that cause spacing issues
+      const contentNodes = Array.from(bq.childNodes);
+      contentNodes.forEach(node => {
+          if (node.nodeName.toLowerCase() === 'p') {
+              const p = node as HTMLElement;
+              if (!p.textContent?.trim() && !p.querySelector('img')) {
+                  p.remove();
+              }
+          }
+      });
+
+      div.innerHTML = bq.innerHTML;
+      bq.parentNode?.replaceChild(div, bq);
   });
 
   return doc.body.innerHTML;

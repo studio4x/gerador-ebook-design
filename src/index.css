@@ -168,6 +168,11 @@
   font-weight: 500;
 }
 
+.frase-central p {
+  margin: 0;
+  padding: 0;
+}
+
 .chapter-opener {
   display: flex;
   flex-direction: column;
