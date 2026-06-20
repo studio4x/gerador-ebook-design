@@ -78,8 +78,6 @@
   margin-top: 0;
   margin-bottom: var(--ebook-para-margin, 1.5rem);
   font-weight: 600;
-  page-break-before: always;
-  break-before: page;
 }
 
 .ebook-content h2 {

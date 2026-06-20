@@ -40,7 +40,7 @@ export default function App() {
     professionalReg: "CREFITO-3/21465-TO",
     brand: "Conexão Seres",
     website: "https://conexaoseres.com.br",
-    materialType: "E-book educativo de baixo ticket",
+    materialType: "E-book educativo",
     targetAudience: "Adultos neurodivergentes e rede de apoio",
     ctaText:
       "Se este material fez sentido para você, talvez seja importante olhar para sua rotina de forma mais individualizada.\n\nA Terapia Ocupacional pode ajudar a compreender como rotina, sensorialidade, energia, ambiente, autonomia e participação se relacionam no seu cotidiano.",
@@ -149,49 +149,8 @@ export default function App() {
     localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
   }, [blocks]);
 
-  // Build version state tracking
-  const [buildVersionObj, setBuildVersionObj] = useState(() => {
-    const saved = localStorage.getItem("ebook_build_version");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return { major: 1, minor: 0, patch: 0, timestamp: Date.now() };
-  });
-
-  const buildVersionStr = `v${buildVersionObj.major}.${buildVersionObj.minor}.${buildVersionObj.patch}`;
-
-  const isFirstMount = useRef(true);
-  const prevStringified = useRef("");
-
-  useEffect(() => {
-    const currentStr = JSON.stringify({ blocks, settings });
-
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      prevStringified.current = currentStr;
-      return;
-    }
-
-    if (prevStringified.current !== currentStr) {
-      prevStringified.current = currentStr;
-      
-      const timer = setTimeout(() => {
-        setBuildVersionObj((prev: any) => {
-          const updated = {
-            ...prev,
-            patch: (prev.patch || 0) + 1,
-            timestamp: Date.now()
-          };
-          localStorage.setItem("ebook_build_version", JSON.stringify(updated));
-          return updated;
-        });
-      }, 1000); // 1s debounce to avoid rapid increments during fast active typing
-
-      return () => clearTimeout(timer);
-    }
-  }, [blocks, settings]);
+  // Build version is statically defined corresponding to the workspace/app structure deployment
+  const buildVersionStr = "v1.4.2";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -548,6 +507,9 @@ export default function App() {
       const { jsPDF } = await import("jspdf");
       const html2canvas = (await import("html2canvas")).default;
 
+      // Pre-extract stylesheet rules as oklch-free standard CSS to prevent CORS and OKLCH rendering crashes
+      const cleanCss = getOklchFreeStyleString();
+
       // Find all `.page` elements in the exclusive offscreen render container
       let container = document.getElementById("pdf-render-offscreen");
       if (!container) {
@@ -563,9 +525,6 @@ export default function App() {
       if (pages.length === 0) {
         throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
       }
-
-      // Pre-extract stylesheet rules as oklch-free standard CSS
-      const cleanCss = getOklchFreeStyleString();
 
       // Initialize A4 Portrait PDF: 210mm x 297mm
       const doc = new jsPDF({
@@ -592,11 +551,24 @@ export default function App() {
           logging: false,
           allowTaint: true,
           backgroundColor: settings.backgroundColor || "#FAF8F4",
-          // Force fixed layout dimensions for perfect page cuts matching CSS
           windowWidth: 794,  // 210mm in pixels at 96 DPI
-          windowHeight: 1123, // 297mm in pixels at 96 DPI
+          scrollX: 0,
+          scrollY: 0,
           onclone: (clonedDoc) => {
-            // 1. Remove Tailwind links & style tag blocks in clone to prevent color parsing errors
+            // 1. Reset offscreen container to static relative layout to allow html2canvas to compute coordinates beautifully
+            const clonedOffscreen = clonedDoc.getElementById("pdf-render-offscreen");
+            if (clonedOffscreen) {
+              clonedOffscreen.style.position = "static";
+              clonedOffscreen.style.left = "0";
+              clonedOffscreen.style.top = "0";
+              clonedOffscreen.style.margin = "0";
+              clonedOffscreen.style.width = "210mm";
+              clonedOffscreen.style.height = "auto";
+              clonedOffscreen.style.overflow = "visible";
+              clonedOffscreen.style.opacity = "1";
+            }
+
+            // 2. Remove Tailwind links & style tag blocks in clone to prevent color parsing and iframe loading CORS errors
             const styledLinks = clonedDoc.querySelectorAll("link[rel='stylesheet'], style");
             styledLinks.forEach((el) => {
               if (el.tagName.toLowerCase() === "link") {
@@ -609,12 +581,12 @@ export default function App() {
               }
             });
 
-            // 2. Inject our oklch-free, hsla-approximate CSS string
+            // 3. Inject our oklch-free inline css string
             const styleEl = clonedDoc.createElement("style");
             styleEl.textContent = cleanCss;
             clonedDoc.head.appendChild(styleEl);
 
-            // 3. Clean any inline oklch attributes inside elements
+            // 4. Clean any remaining inline oklch attributes inside elements for ultimate fallback
             clonedDoc.querySelectorAll("[style]").forEach((el) => {
               const elHtml = el as HTMLElement;
               let inlineStyle = elHtml.getAttribute("style") || "";
@@ -1192,11 +1164,15 @@ export default function App() {
       {/* Container invisível exclusivo para renderização e exportação direta de PDF */}
       <div
         id="pdf-render-offscreen"
+        className="no-print"
         style={{
-          position: "fixed",
-          left: "-9999px",
+          position: "absolute",
           top: 0,
+          left: 0,
           width: "210mm",
+          height: "1px",
+          overflow: "hidden",
+          opacity: 0,
           zIndex: -1000,
           pointerEvents: "none",
         }}

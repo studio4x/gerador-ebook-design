@@ -56,12 +56,13 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     let shouldBreakBefore = false;
 
     if (currentPageNodes.length > 0) {
-      if (isH1 || isChapterOpener) {
+      if (currentHeightUnits + nodeCost > activeLimit) {
         shouldBreakBefore = true;
-      } else if (currentHeightUnits + nodeCost > activeLimit) {
+      } else if ((isH1 || isChapterOpener) && (currentHeightUnits > activeLimit * 0.70)) {
+        // Only force break on chapter start/H1 if the current page is already over 70% full
         shouldBreakBefore = true;
-      } else if ((isH2 || isH3 || isBox) && (currentHeightUnits > activeLimit * 0.50)) {
-        // Aesthetic rule: Avoid lonely headings (orphan control) or bulky boxes at page bottom
+      } else if ((isH2 || isH3 || isBox) && (currentHeightUnits > activeLimit * 0.85)) {
+        // Prevent orphan headings near the very bottom of the page (last 15% height)
         shouldBreakBefore = true;
       }
     }
@@ -74,12 +75,6 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     currentPageNodes.push(node);
     currentHeightUnits += nodeCost;
-    
-    if (isChapterOpener) {
-       pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
-       currentPageNodes = [];
-       currentHeightUnits = 0;
-    }
   }
   
   if (currentPageNodes.length > 0) {

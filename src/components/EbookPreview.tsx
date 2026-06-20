@@ -109,9 +109,52 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
       const chapterOpener = pageDoc.querySelector('.chapter-opener');
       if (chapterOpener) {
         const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
-        const titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
+        let titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
+        
+        // Let's resolve the first actual title/heading of the chapter for reference
+        // If titleText is generic (like "Capítulo X" or empty), look for the first real heading
+        if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
+          let foundRealTitle = '';
+          
+          // Scan current page and subsequent pages until the next chapter opener
+          for (let scanIdx = index; scanIdx < contentPages.length; scanIdx++) {
+            if (scanIdx > index) {
+              const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+              if (scanDoc.querySelector('.chapter-opener')) {
+                break; // Stop scanning when we hit the next chapter
+              }
+            }
+            
+            const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+            const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
+            for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
+              const h = otherHeadings[hIdx];
+              if (h.closest('.chapter-opener')) continue;
+              
+              const isExcluded = h.closest('.box-reflexao') || 
+                                 h.closest('.box-cuidado') || 
+                                 h.closest('.box-informativo');
+              if (isExcluded) continue;
+              
+              const hText = h.textContent?.trim() || '';
+              if (hText && hText.length > 2 && !/^capítulo/i.test(hText)) {
+                foundRealTitle = hText;
+                break;
+              }
+            }
+            if (foundRealTitle) break;
+          }
+          
+          if (foundRealTitle) {
+            titleText = foundRealTitle;
+          }
+        }
+        
+        // Clean any leading "Capítulo X - " from the final titleText so it prefixes beautifully
+        const cleanTitle = titleText.replace(/^capítulo\s*\d+\s*[-|:]?\s*/i, '').trim();
+
         entries.push({
-          title: `Capítulo ${numText.padStart(2, '0')}: ${titleText || 'Introdução'}`,
+          title: `Capítulo ${numText.padStart(2, '0')}: ${cleanTitle || 'Introdução'}`,
           pageNumber: pageNum,
           isChapter: true,
           domId: `content-page-${index}`
@@ -244,7 +287,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
       <div className={`text-[10pt] text-[#6F8F9A] flex ${justifyClass} items-end border-t border-[#C9D8D5] pt-4 mt-8 footer-print shrink-0`}>
          <span className={`${textOrder} ${footerTextAlignClass} flex-grow md:flex-grow-0`}>
            {footerTextVal}
-           {buildVersion && (
+           {false && (
              <span className="text-[8pt] text-[#8ea7b0] font-mono ml-2 border-l border-[#C9D8D5] pl-2 opacity-80" id="ebook-footer-build-version">
                Build: {buildVersion}
              </span>
@@ -269,7 +312,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
         <div className="mb-12">
           {settings.materialType && (
             <span className="inline-block bg-[#245C5A] text-white px-3 py-1 rounded-full text-xs uppercase tracking-wider font-semibold mb-4">
-              {settings.materialType}
+              {settings.materialType ? settings.materialType.replace(/de baixo ticket/gi, "").replace(/baixo ticket/gi, "").replace(/barato/gi, "").replace(/\s+/g, " ").trim() : ""}
             </span>
           )}
           <h1 className="text-5xl md:text-6xl font-display text-[#245C5A] font-bold leading-tight mb-4 animate-fade-in">
