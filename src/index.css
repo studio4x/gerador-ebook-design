@@ -69,6 +69,9 @@
 .ebook-content {
   font-size: var(--ebook-body-size, 11pt);
   line-height: var(--ebook-line-height, 1.45);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .ebook-content h1 {

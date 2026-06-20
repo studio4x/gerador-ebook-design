@@ -9,9 +9,9 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   
   // Custom height footprint units that map to visual space occupied under 297mm A4 bounds
   const limits = {
-    compact: 550,       // Max height units per page for compact layout
-    comfortable: 440,   // Max height units for beautiful comfortable layout
-    premium: 330        // Max height units for premium editorial layout
+    compact: 460,       // Reduced from 550 to respect the bottom margin & footer space
+    comfortable: 350,   // Reduced from 440 to avoid crowding the footer
+    premium: 260        // Reduced from 330 to ensure premium editorial has ample footer safety
   };
   
   const activeLimit = limits[mode] || limits.comfortable;
@@ -39,18 +39,18 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     if (isBox) {
       // Boxes have surrounding margins, inner paddings, borders and text
-      nodeCost += 40;
+      nodeCost += 60; // Increased to protect bottom boundary on box content
     } else if (isH1 || isChapterOpener) {
       nodeCost += 50;
     } else if (isH2) {
-      nodeCost += 25;
+      nodeCost += 30; // Increased heading height weight
     } else if (isH3) {
-      nodeCost += 20;
+      nodeCost += 25;
     } else if (tagName === 'p' || tagName === 'li' || tagName === 'ul' || tagName === 'ol') {
       // Paragraphs and list items have substantial margin bottoms
-      nodeCost += 8;
+      nodeCost += 14; // Increased layout margin footprint weight
     } else {
-      nodeCost += 5;
+      nodeCost += 8;
     }
 
     let shouldBreakBefore = false;

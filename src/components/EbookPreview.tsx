@@ -29,20 +29,37 @@ interface TocEntry {
   pageNumber: number;
   isChapter: boolean;
   domId: string;
+  level?: number;
 }
 
 export function EbookPreview({ settings, contentPages, buildVersion }: EbookPreviewProps) {
   const [viewMode, setViewMode] = useState<'scroll' | 'book' | 'grid'>('scroll');
-  const [zoom, setZoom] = useState<number>(85);
+  const [zoom, setZoom] = useState<number>(55);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showInstructions, setShowInstructions] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ebook_preview_instructions_visible');
+      return saved !== 'false';
+    }
+    return true;
+  });
+
+  const toggleInstructions = (val: boolean) => {
+    setShowInstructions(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ebook_preview_instructions_visible', String(val));
+    }
+  };
 
   // Automatically adjust default layout representation on smaller screen devices
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (window.innerWidth < 1024) {
         setSidebarOpen(false);
-        setZoom(70);
+        setZoom(45);
+      } else {
+        setZoom(55);
       }
     }
   }, []);
@@ -83,21 +100,12 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
   const hasAviso = !!settings.educationalWarning;
   const hasSumario = settings.generateToc !== false;
 
-  let currentPageCount = 1;
-  const capaPageNum = hasCapa ? currentPageCount++ : 0;
-  const rostoPageNum = hasRosto ? currentPageCount++ : 0;
-  const avisoPageNum = hasAviso ? currentPageCount++ : 0;
-  const sumarioPageNum = hasSumario ? currentPageCount++ : 0;
-  
-  const contentStartPageNum = currentPageCount;
-
-  // Extract chapters / principal headings from parsed HTML of the content pages, memoized for performance
-  const tocEntries = useMemo<TocEntry[]>(() => {
+  // Extract raw chapters / principal headings from parsed HTML of the content pages, memoized for performance
+  const rawTocEntries = useMemo(() => {
     const parser = new DOMParser();
-    const entries: TocEntry[] = [];
+    const entries: { title: string; relativePageOffset: number; isChapter: boolean; level: number }[] = [];
 
     contentPages.forEach((pageHtml, index) => {
-      const pageNum = contentStartPageNum + index;
       const pageDoc = parser.parseFromString(pageHtml, 'text/html');
 
       // Check if it's a chapter opener
@@ -106,30 +114,25 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
         const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
         let titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
         
-        // Let's resolve the first actual title/heading of the chapter for reference
+        // Find real title if empty
         if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
           let foundRealTitle = '';
-          
-          // Scan current page and subsequent pages until the next chapter opener
           for (let scanIdx = index; scanIdx < contentPages.length; scanIdx++) {
             if (scanIdx > index) {
               const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
               if (scanDoc.querySelector('.chapter-opener')) {
-                break; // Stop scanning when we hit the next chapter
+                break;
               }
             }
-            
             const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
             const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
             for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
               const h = otherHeadings[hIdx];
               if (h.closest('.chapter-opener')) continue;
-              
               const isExcluded = h.closest('.box-reflexao') || 
                                  h.closest('.box-cuidado') || 
                                  h.closest('.box-informativo');
               if (isExcluded) continue;
-              
               const hText = h.textContent?.trim() || '';
               if (hText && hText.length > 2 && !/^capítulo/i.test(hText)) {
                 foundRealTitle = hText;
@@ -138,68 +141,98 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
             }
             if (foundRealTitle) break;
           }
-          
           if (foundRealTitle) {
             titleText = foundRealTitle;
           }
         }
         
-        // Clean any leading "Capítulo X - " from the final titleText so it prefixes beautifully
         const cleanTitle = titleText.replace(/^capítulo\s*\d+\s*[-|:]?\s*/i, '').trim();
 
         entries.push({
           title: `Capítulo ${numText.padStart(2, '0')}: ${cleanTitle || 'Introdução'}`,
-          pageNumber: pageNum,
+          relativePageOffset: index,
           isChapter: true,
-          domId: `content-page-${index}`
+          level: 1
         });
-      } else {
-        // Look for other prominent main headings (H1)
-        const h1Headings = pageDoc.querySelectorAll('h1');
-        let foundH1 = false;
-        h1Headings.forEach((h1) => {
-          const isExcluded = h1.closest('.box-reflexao') || 
-                             h1.closest('.box-cuidado') || 
-                             h1.closest('.box-informativo');
-          if (!isExcluded) {
-            const text = h1.textContent?.trim() || '';
-            if (text && text.length > 2) {
-              entries.push({
-                title: text,
-                pageNumber: pageNum,
-                isChapter: true,
-                domId: `content-page-${index}`
-              });
-              foundH1 = true;
-            }
-          }
-        });
-
-        // If no prominent H1 on this page, look for primary H2 elements
-        if (!foundH1) {
-          const h2Headings = pageDoc.querySelectorAll('h2');
-          h2Headings.forEach((h2) => {
-            const isExcluded = h2.closest('.box-reflexao') || 
-                               h2.closest('.box-cuidado') || 
-                               h2.closest('.box-informativo');
-            if (!isExcluded) {
-              const text = h2.textContent?.trim() || '';
-              if (text && text.length > 2) {
-                entries.push({
-                  title: text,
-                  pageNumber: pageNum,
-                  isChapter: false,
-                  domId: `content-page-${index}`
-                });
-              }
-            }
-          });
-        }
       }
+
+      // Also scan this page for other sub-headings (H1, H2, H3), regardless of whether it's a chapter-opener page (excluding the chapter opener title itself)
+      const headings = pageDoc.querySelectorAll('h1, h2, h3');
+      headings.forEach((heading) => {
+        if (heading.closest('.chapter-opener')) return;
+        
+        const isExcluded = heading.closest('.box-reflexao') || 
+                           heading.closest('.box-cuidado') || 
+                           heading.closest('.box-informativo');
+        if (isExcluded) return;
+
+        const text = heading.textContent?.trim() || '';
+        if (text && text.length > 2) {
+          const tagName = heading.tagName.toLowerCase();
+          
+          let level = 2;
+          let isChapter = false;
+          if (tagName === 'h1') {
+            level = 1;
+            isChapter = true;
+          } else if (tagName === 'h2') {
+            level = 2;
+          } else if (tagName === 'h3') {
+            level = 3;
+          }
+
+          // Avoid duplicating identical headings on the exact same page
+          const isDup = entries.some(e => e.title === text && e.relativePageOffset === index);
+          if (!isDup) {
+            entries.push({
+              title: text,
+              relativePageOffset: index,
+              isChapter: isChapter,
+              level: level
+            });
+          }
+        }
+      });
     });
 
     return entries;
-  }, [contentPages, contentStartPageNum]);
+  }, [contentPages]);
+
+  // Adjust table of contents entries spacing by Density setting
+  const entriesPerPage = useMemo(() => {
+    if (settings.densityMode === 'compact') return 16;
+    if (settings.densityMode === 'premium') return 9;
+    return 12; // default (comfortable)
+  }, [settings.densityMode]);
+
+  const numSumarioPages = useMemo(() => {
+    if (!hasSumario) return 0;
+    if (rawTocEntries.length === 0) return 1;
+    return Math.ceil(rawTocEntries.length / entriesPerPage);
+  }, [hasSumario, rawTocEntries, entriesPerPage]);
+
+  // Calculate dynamic starting and content page boundaries
+  let tempSumstart = 1;
+  const capaPageNum = hasCapa ? tempSumstart++ : 0;
+  const rostoPageNum = hasRosto ? tempSumstart++ : 0;
+  const avisoPageNum = hasAviso ? tempSumstart++ : 0;
+  
+  const sumarioPageStartNum = hasSumario ? tempSumstart : 0;
+  if (hasSumario) {
+    tempSumstart += numSumarioPages;
+  }
+  const contentStartPageNum = tempSumstart;
+
+  // Fully compiled absolute table of contents entries mapped based on the content starting index computed above
+  const tocEntries = useMemo<TocEntry[]>(() => {
+    return rawTocEntries.map(entry => ({
+      title: entry.title,
+      pageNumber: contentStartPageNum + entry.relativePageOffset,
+      isChapter: entry.isChapter,
+      level: entry.level,
+      domId: `content-page-${entry.relativePageOffset}`
+    }));
+  }, [rawTocEntries, contentStartPageNum]);
 
   // Pre-calculate the current active chapter title for every content page
   const pageChapterTitles = useMemo<string[]>(() => {
@@ -355,7 +388,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
 
   // Compile exact listing of projected pages with label identifiers
   const pagesList = useMemo(() => {
-    const list: { id: string; label: string; type: 'capa' | 'rosto' | 'aviso' | 'sumario' | 'conteudo' | 'cta' | 'final'; pageNum: number }[] = [];
+    const list: { id: string; label: string; type: 'capa' | 'rosto' | 'aviso' | 'sumario' | 'conteudo' | 'cta' | 'final'; pageNum: number; sumarioPageIndex?: number }[] = [];
     let pNum = 1;
     
     if (hasCapa) {
@@ -368,7 +401,15 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
       list.push({ id: 'aviso-page', label: 'Aviso Importante', type: 'aviso', pageNum: pNum++ });
     }
     if (hasSumario) {
-      list.push({ id: 'sumario', label: 'Sumário', type: 'sumario', pageNum: pNum++ });
+      for (let sIdx = 0; sIdx < numSumarioPages; sIdx++) {
+        list.push({ 
+          id: `sumario-page-${sIdx}`, 
+          label: `Sumário${numSumarioPages > 1 ? ` - Parte ${sIdx + 1}` : ''}`, 
+          type: 'sumario', 
+          pageNum: sumarioPageStartNum + sIdx,
+          sumarioPageIndex: sIdx
+        });
+      }
     }
     contentPages.forEach((_, idx) => {
       const rawCh = pageChapterTitles[idx];
@@ -382,7 +423,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
       list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
     }
     return list;
-  }, [hasCapa, hasRosto, hasAviso, hasSumario, contentPages, pageChapterTitles, settings]);
+  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, contentPages, pageChapterTitles, settings]);
 
   // Perform full search text matching calculation
   const checkPageMatch = (pageId: string) => {
@@ -403,7 +444,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
     if (pageId === 'aviso-page') {
       return (settings.educationalWarning || '').toLowerCase().includes(query);
     }
-    if (pageId === 'sumario') {
+    if (pageId.startsWith('sumario-page-')) {
       return 'sumário sumario índice indice capítulos capitulos'.includes(query);
     }
     if (pageId.startsWith('content-page-')) {
@@ -517,6 +558,20 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
             >
               {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
             </button>
+            
+            <button 
+              onClick={() => toggleInstructions(!showInstructions)}
+              className={`px-2.5 py-1.5 h-9 rounded-lg transition-all flex items-center justify-center border text-xs gap-1.5 font-bold ${
+                showInstructions 
+                  ? 'bg-amber-50 border-amber-200 text-amber-700' 
+                  : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+              title={showInstructions ? "Ocultar Dicas de Exportação PDF" : "Exibir Dicas de Exportação PDF"}
+            >
+              <Info size={14} />
+              <span className="hidden sm:inline">Como Gerar PDF</span>
+            </button>
+            
             <div className="h-5 w-[1px] bg-gray-200 hidden sm:block"></div>
             
             {/* View Mode controls */}
@@ -595,9 +650,9 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
             </button>
             
             <button 
-              onClick={() => setZoom(window.innerWidth < 1024 ? 70 : 85)}
+              onClick={() => setZoom(window.innerWidth < 1024 ? 45 : 55)}
               className="text-[10px] uppercase font-bold text-gray-500 hover:text-[#245C5A] bg-gray-100 hover:bg-gray-200/60 px-2 h-7 rounded-md border border-gray-200/50 flex items-center"
-              title="Ajustar ao Padrão"
+              title="Ajustar ao Padrão (Ver Página Completa)"
             >
               Reset
             </button>
@@ -707,19 +762,27 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
          
          {/* PREVIEW CONTAINER CANVAS */}
          <div className="flex-grow min-w-0 flex flex-col items-center w-full">
-            {/* Advice instructions helper card (Dismissible or helpful helper) */}
-            <div className="no-print bg-[#FAF8F4] border border-[#C9D8D5]/60 rounded-2xl p-4 mb-6 w-full text-xs text-gray-600 leading-relaxed max-w-4xl shadow-2xs">
-              <div className="flex items-center gap-2 font-bold text-[#245C5A] mb-1.5">
-                <BookOpen size={14} className="shrink-0" />
-                <span>Instruções Práticas para Impressão Perfeita em PDF:</span>
+            {/* Advice instructions helper card (Dismissible) */}
+            {showInstructions && (
+              <div className="no-print bg-[#FAF8F4]/95 border border-[#C9D8D5]/70 rounded-xl p-3 mb-5 w-full text-xs text-gray-600 leading-normal max-w-4xl shadow-2xs relative flex items-start sm:items-center justify-between gap-3 transition-all">
+                <div className="flex-grow">
+                  <div className="flex items-center gap-1.5 font-bold text-[#245C5A] mb-1">
+                    <BookOpen size={13} className="shrink-0 text-amber-700 animate-pulse" />
+                    <span>Como Exportar o PDF Perfeito:</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Aperte <strong className="text-gray-700">Ctrl + P</strong> (ou Cmd + P) • Destino: <strong className="text-gray-700">Salvar como PDF</strong> • Tamanho: <strong className="text-gray-700">A4</strong> • Margens: <strong className="text-gray-700">Nenhuma</strong> • Marcar <strong className="text-gray-700">Gráficos de segundo plano</strong>.
+                  </p>
+                </div>
+                <button
+                  onClick={() => toggleInstructions(false)}
+                  className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-lg transition-all shrink-0 ml-2"
+                  title="Fechar instrução"
+                >
+                  <X size={14} />
+                </button>
               </div>
-              <ul className="list-disc pl-5 space-y-1 text-gray-500 font-medium">
-                <li>Defina o destino como <strong className="text-gray-700">Salvar como PDF</strong> nas configurações de impressão de seu navegador.</li>
-                <li>Mude o layout para <strong className="text-gray-700">Retrato</strong>, tamanho do papel <strong className="text-gray-700">A4 (padrão)</strong>.</li>
-                <li>Ajuste as margens do papel para <strong className="text-gray-700">Nenhuma</strong> ou zeradas para manter o alinhamento de 100% de precisão.</li>
-                <li>Certifique-se de marcar a opção <strong className="text-gray-700">Gráficos de segundo plano</strong> para exibir fundos decorativos, cores e bordas.</li>
-              </ul>
-            </div>
+            )}
             
             {/* The rendered pages stream */}
             <div 
@@ -835,8 +898,13 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
                          </section>
                        )}
 
-                       {p.type === 'sumario' && (
-                         <section id="sumario" className="page flex flex-col justify-between scroll-mt-6 relative">
+                       {p.type === 'sumario' && (() => {
+                         const sIdx = p.sumarioPageIndex ?? 0;
+                         const startIdx = sIdx * entriesPerPage;
+                         const endIdx = startIdx + entriesPerPage;
+                         const paginatedEntries = tocEntries.slice(startIdx, endIdx);
+                         return (
+                         <section id={p.id} className="page flex flex-col justify-between scroll-mt-6 relative">
                             <div className="absolute top-0 right-0 w-48 h-48 bg-[#F4EFE7] rounded-bl-full opacity-30 -z-10"></div>
                             
                             {renderHeader(false)}
@@ -844,14 +912,16 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
                             <div className="flex-grow">
                                <div className="mb-8 text-left border-b border-[#FAF8F4] pb-6">
                                  <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A] block mb-1">Índice Geral</span>
-                                 <h1 className="text-4xl font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
+                                 <h1 className="text-4xl font-display font-bold text-[#245C5A] tracking-tight">
+                                   {sIdx === 0 ? "Sumário" : `Sumário (${sIdx + 1})`}
+                                 </h1>
                                  <div className="w-12 h-1 bg-[#C9826B] mt-3"></div>
                                </div>
                                
                                <div className="max-w-3xl mt-6">
                                  <ul className="space-y-4">
-                                   {tocEntries.map((entry, idx) => (
-                                     <li key={`${entry.domId}-${idx}`}>
+                                   {paginatedEntries.map((entry, idx) => (
+                                     <li key={`${entry.domId}-${sIdx}-${idx}`}>
                                        <a 
                                          href={`#${entry.domId}`}
                                          onClick={(e) => {
@@ -869,9 +939,11 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
                                          className="group flex items-baseline justify-between hover:text-[#C9826B] transition-colors duration-150 py-1"
                                        >
                                          <span className={`text-left line-clamp-1 pr-2 transition-colors duration-150 ${
-                                           entry.isChapter 
-                                            ? 'font-display font-bold text-[#245C5A] text-base group-hover:text-[#C9826B]' 
-                                            : 'font-sans text-sm text-[#5C6466] pl-6 group-hover:text-[#C9826B]'
+                                           entry.level === 1 
+                                            ? 'font-display font-bold text-[#245C5A] text-sm md:text-base group-hover:text-[#C9826B]' 
+                                            : entry.level === 2
+                                              ? 'font-sans text-sm font-semibold text-[#3D4447] pl-5 group-hover:text-[#C9826B]'
+                                              : 'font-sans text-xs text-[#5C6466] pl-9 group-hover:text-[#C9826B]'
                                          }`}>
                                            {entry.title}
                                          </span>
@@ -897,7 +969,8 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
 
                             {renderFooter(p.pageNum, false)}
                          </section>
-                       )}
+                         );
+                       })()}
 
                        {p.type === 'conteudo' && (() => {
                          const contentIdx = pagesList.filter((x, idx) => idx < pagesList.indexOf(p) && x.type === 'conteudo').length;
