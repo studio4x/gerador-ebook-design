@@ -37,6 +37,7 @@ export type ProjectSettings = {
   headerStyle?: string;
   footerStyle?: string;
   pageNumberStyle?: string;
+  descriptiveHeader?: boolean;
 };
 
 export type ContentBlock = {

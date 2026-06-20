@@ -96,6 +96,25 @@ export function parseHandoffMarkdown(markdown: string): Partial<ProjectSettings>
     result.headerText = headerTxt.replace(/^["']|["']$/g, '');
   }
 
+  // 6b. Descriptive Header option (Inserts active chapter name into page headers)
+  const descriptiveHead = findValue(/(?:Cabeçalho Descritivo|Descritivo|Descriptive Header|Chapter Header|Cabecalho Descritivo):\s*(sim|não|true|false)/i);
+  if (descriptiveHead) {
+    const norm = descriptiveHead.toLowerCase();
+    result.descriptiveHeader = norm.includes('sim') || norm.includes('true');
+  } else {
+    const lowercaseMarkdown = markdown.toLowerCase();
+    if (
+      lowercaseMarkdown.includes('cabeçalho descritivo') ||
+      lowercaseMarkdown.includes('cabeçalho com capítulo') ||
+      lowercaseMarkdown.includes('nome do capítulo no cabeçalho') ||
+      lowercaseMarkdown.includes('nome do capitulo no cabecalho') ||
+      lowercaseMarkdown.includes('capítulo no cabeçalho') ||
+      lowercaseMarkdown.includes('capitulo no cabecalho')
+    ) {
+      result.descriptiveHeader = true;
+    }
+  }
+
   // 7. Footer Text from Visual Configuration/Layout Handoff
   const footerTxt = findValue(/(?:\*\*Rodapé\*\*|\*\*Texto do Rodapé\*\*|Rodapé|Footer|Footer\s*Text):\s*(?:["']?)([^"'\n]+)(?:["']?)/i);
   if (footerTxt) {

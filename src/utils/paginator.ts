@@ -9,9 +9,9 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   
   // Custom height footprint units that map to visual space occupied under 297mm A4 bounds
   const limits = {
-    compact: 420,       // Max height units per page for compact layout
-    comfortable: 310,   // Max height units for beautiful comfortable layout
-    premium: 220        // Max height units for premium editorial layout
+    compact: 550,       // Max height units per page for compact layout
+    comfortable: 440,   // Max height units for beautiful comfortable layout
+    premium: 330        // Max height units for premium editorial layout
   };
   
   const activeLimit = limits[mode] || limits.comfortable;
@@ -39,18 +39,18 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     if (isBox) {
       // Boxes have surrounding margins, inner paddings, borders and text
-      nodeCost += 75;
-    } else if (isH1 || isChapterOpener) {
-      nodeCost += 90;
-    } else if (isH2) {
-      nodeCost += 50;
-    } else if (isH3) {
       nodeCost += 40;
+    } else if (isH1 || isChapterOpener) {
+      nodeCost += 50;
+    } else if (isH2) {
+      nodeCost += 25;
+    } else if (isH3) {
+      nodeCost += 20;
     } else if (tagName === 'p' || tagName === 'li' || tagName === 'ul' || tagName === 'ol') {
       // Paragraphs and list items have substantial margin bottoms
-      nodeCost += 20;
+      nodeCost += 8;
     } else {
-      nodeCost += 15;
+      nodeCost += 5;
     }
 
     let shouldBreakBefore = false;
@@ -58,11 +58,11 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     if (currentPageNodes.length > 0) {
       if (currentHeightUnits + nodeCost > activeLimit) {
         shouldBreakBefore = true;
-      } else if ((isH1 || isChapterOpener) && (currentHeightUnits > activeLimit * 0.70)) {
-        // Only force break on chapter start/H1 if the current page is already over 70% full
+      } else if ((isH1 || isChapterOpener) && (currentHeightUnits > activeLimit * 0.88)) {
+        // Only force break on chapter start/H1 if the current page is already over 88% full
         shouldBreakBefore = true;
-      } else if ((isH2 || isH3 || isBox) && (currentHeightUnits > activeLimit * 0.85)) {
-        // Prevent orphan headings near the very bottom of the page (last 15% height)
+      } else if ((isH2 || isH3 || isBox) && (currentHeightUnits > activeLimit * 0.94)) {
+        // Prevent orphan headings near the very bottom of the page (last 6% height)
         shouldBreakBefore = true;
       }
     }

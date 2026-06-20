@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Gerador de E-books",
+  "description": "Um editor e formatador de e-books de alta fidelidade que gera PDFs profissionais no formato A4 a partir de arquivos Markdown.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

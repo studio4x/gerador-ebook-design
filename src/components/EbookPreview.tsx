@@ -208,6 +208,67 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
     return entries;
   }, [contentPages, contentStartPageNum]);
 
+  // Pre-calculate the current active chapter title for every content page
+  const pageChapterTitles = React.useMemo<string[]>(() => {
+    const titles: string[] = [];
+    let currentChapterTitle = '';
+    const parser = new DOMParser();
+
+    contentPages.forEach((pageHtml, index) => {
+      const pageDoc = parser.parseFromString(pageHtml, 'text/html');
+      const chapterOpener = pageDoc.querySelector('.chapter-opener');
+
+      if (chapterOpener) {
+        const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
+        let titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
+        
+        // Find first real title if titleText is empty or generic
+        if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
+          let foundRealTitle = '';
+          for (let scanIdx = index; scanIdx < contentPages.length; scanIdx++) {
+            if (scanIdx > index) {
+              const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+              if (scanDoc.querySelector('.chapter-opener')) {
+                break;
+              }
+            }
+            const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+            const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
+            for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
+              const h = otherHeadings[hIdx];
+              if (h.closest('.chapter-opener')) continue;
+              const isExcluded = h.closest('.box-reflexao') || 
+                                 h.closest('.box-cuidado') || 
+                                 h.closest('.box-informativo');
+              if (isExcluded) continue;
+              const hText = h.textContent?.trim() || '';
+              if (hText && hText.length > 2 && !/^capítulo/i.test(hText)) {
+                foundRealTitle = hText;
+                break;
+              }
+            }
+            if (foundRealTitle) break;
+          }
+          if (foundRealTitle) {
+            titleText = foundRealTitle;
+          }
+        }
+        
+        const cleanTitle = titleText.replace(/^capítulo\s*\d+\s*[-|:]?\s*/i, '').trim();
+        if (numText && cleanTitle) {
+          currentChapterTitle = `Capítulo ${numText.replace(/^0+/, '')}: ${cleanTitle}`;
+        } else if (numText) {
+          currentChapterTitle = `Capítulo ${numText.replace(/^0+/, '')}`;
+        } else {
+          currentChapterTitle = cleanTitle || '';
+        }
+      }
+      titles.push(currentChapterTitle);
+    });
+
+    return titles;
+  }, [contentPages]);
+
   const ctaPageNum = contentStartPageNum + contentPages.length;
   const finalPageNum = ctaPageNum + (settings.ctaText ? 1 : 0);
 
@@ -248,9 +309,15 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
     border: settings.pageBorder ? '1px solid #C9D8D5' : undefined,
   } as React.CSSProperties;
 
-  const renderHeader = (isCoverOrFirstPage: boolean) => {
+  const renderHeader = (isCoverOrFirstPage: boolean, pageIdx?: number) => {
     if (isCoverOrFirstPage) return null;
-    const headerTextVal = settings.headerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'Livro Digital'}`;
+    let headerTextVal = settings.headerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'Livro Digital'}`;
+    
+    // Dynamic chapter name inclusion if descriptiveHeader is enabled
+    if (settings.descriptiveHeader !== false && pageIdx !== undefined && pageChapterTitles[pageIdx]) {
+      headerTextVal = `${headerTextVal} | ${pageChapterTitles[pageIdx]}`;
+    }
+
     const alignment = settings.headerStyle || 'left';
     let alignmentClass = 'text-left';
     if (alignment === 'center') alignmentClass = 'text-center';
@@ -434,7 +501,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
         const pageNum = contentStartPageNum + index;
         return (
           <section key={`content-page-${index}`} id={`content-page-${index}`} className="page flex flex-col justify-between scroll-mt-6">
-             {renderHeader(false)}
+             {renderHeader(false, index)}
              <div 
                className="ebook-content flex-grow"
                dangerouslySetInnerHTML={{ __html: pageHtml }}

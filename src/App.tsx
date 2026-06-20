@@ -61,11 +61,24 @@ export default function App() {
     filename: "EBOOK_VISUAL_HANDOFF.md (Padrão)",
     uploadedAt: new Date().toLocaleString("pt-BR"),
     settings: initialSettings,
-    rawContent:
-      "# Handoff Visual — E-book Conexão Seres\n\n**Título:** Não é Falta de Disciplina\n**Subtítulo:** Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente...",
+    rawContent: [
+      "# Handoff Visual — E-book Conexão Seres",
+      "",
+      "**Título:** Não é Falta de Disciplina",
+      "**Subtítulo:** Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente",
+      "**Modo de Distribuição:** confortável",
+      "**Gerar Sumário:** sim",
+      "**Borda da Página:** não",
+      "**Cabeçalho Descritivo:** sim",
+      "**Texto do Cabeçalho:** Conexão Seres",
+      "**Alinhamento do Cabeçalho:** esquerda",
+      "**Texto do Rodapé:** Conexão Seres | Livro Digital",
+      "**Alinhamento do Rodapé:** esquerda",
+      "**Numeração de Página:** direita",
+    ].join("\n"),
   };
 
-  const [activeTab, setActiveTab] = useState<"content" | "preview">("content");
+  const [activeTab, setActiveTab] = useState<"content" | "visual" | "preview">("content");
   const [settings, setSettings] = useState<ProjectSettings>(() => {
     const saved = localStorage.getItem("ebook_layout_settings");
     if (saved) {
@@ -150,7 +163,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.2";
+  const buildVersionStr = "v1.4.3";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -628,79 +641,83 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col print:bg-white print:m-0">
       {/* HEADER (No Print) */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between no-print sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-[#245C5A] flex items-center justify-center">
-            <LayoutTemplate size={18} className="text-[#F4EFE7]" />
+      <header className="bg-white border-b border-gray-200 px-4 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 no-print sticky top-0 z-50 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between md:justify-start gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[#245C5A] flex items-center justify-center shrink-0 shadow-xs">
+              <BookOpen size={16} className="text-[#F4EFE7]" />
+            </div>
+            <div className="flex flex-col">
+              <h1 className="text-sm font-display font-semibold text-[#2F3437] tracking-tight leading-tight">
+                Gerador de E-books
+              </h1>
+              <span className="text-[9px] font-mono text-gray-400" id="header-build-version">
+                Build {buildVersionStr}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-            <h1 className="text-xl font-display font-semibold text-[#2F3437]">
-              Gerador de E-books Conexão Seres
-            </h1>
-            <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-bold tracking-wider w-fit" id="header-build-version">
-              Build {buildVersionStr}
-            </span>
+
+          {/* TAB SYSTEM (Compact and organized) */}
+          <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200/50">
+            <button
+              onClick={() => setActiveTab("content")}
+              className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all flex items-center gap-1.5 ${activeTab === "content" ? "bg-white shadow-xs text-[#245C5A]" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              <FileText size={13} />
+              <span>Conteúdo</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("visual")}
+              className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all flex items-center gap-1.5 ${activeTab === "visual" ? "bg-white shadow-xs text-[#245C5A]" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              <Palette size={13} />
+              <span>Visual & Design</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("preview")}
+              className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all flex items-center gap-1.5 ${activeTab === "preview" ? "bg-white shadow-xs text-[#245C5A]" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              <CheckCircle size={13} />
+              <span>Visualizar & PDF</span>
+            </button>
           </div>
         </div>
 
-        <div className="flex bg-gray-100 p-1 rounded-lg">
-          <button
-            onClick={() => setActiveTab("content")}
-            className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${activeTab === "content" ? "bg-white shadow-sm text-[#245C5A]" : "text-gray-600 hover:text-gray-900"}`}
-          >
-            <FileText size={16} className="inline mr-2" /> Conteúdo
-          </button>
-          <button
-            onClick={() => setActiveTab("preview")}
-            className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${activeTab === "preview" ? "bg-white shadow-sm text-[#245C5A]" : "text-gray-600 hover:text-gray-900"}`}
-          >
-            <CheckCircle size={16} className="inline mr-2" /> Pré-visualização &
-            PDF
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
+        {/* OPERATIONS (Compact, size-reduced and grouped) */}
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button
             onClick={() => setShowClearConfirm(true)}
-            className="px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors border border-red-200"
+            className="h-8 px-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 bg-white border border-red-200 rounded-md transition-colors flex items-center gap-1"
             title="Limpar todos os dados e começar um novo e-book"
           >
-            <Trash2 size={16} className="inline mr-2" /> Limpar Tudo
+            <Trash2 size={13} />
+            <span className="hidden sm:inline">Limpar</span>
           </button>
-          <label className="cursor-pointer px-3 py-2 text-sm font-medium text-[#245C5A] hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
-            <Upload size={16} className="inline mr-2" /> Carregar JSON
-            <input
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={loadProject}
-            />
-          </label>
-          <button
-            onClick={saveProject}
-            className="px-3 py-2 text-sm font-medium text-[#245C5A] hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
-          >
-            <Download size={16} className="inline mr-2" /> Salvar JSON
-          </button>
+          
+          <div className="h-4 w-[1px] bg-gray-200 mx-1 hidden md:block"></div>
+
           <button
             onClick={printPdf}
             disabled={blocks.length === 0 || isExportingPdf}
-            className="px-4 py-2 text-sm font-bold text-white bg-[#245C5A] hover:bg-[#1b4342] rounded-md transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="h-8 px-3 text-xs font-bold text-white bg-[#245C5A] hover:bg-[#1b4342] rounded-md transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             title={
               blocks.length === 0
                 ? "Adicione conteúdo antes de exportar"
                 : isExportingPdf
                   ? "Exportando PDF..."
-                  : "Exportar para PDF (A4)"
+                  : "Exportar para PDF"
             }
           >
             {isExportingPdf ? (
               <>
-                <RefreshCw size={16} className="animate-spin" />
-                Gerando...
+                <RefreshCw size={12} className="animate-spin" />
+                <span>Gerando...</span>
               </>
             ) : (
-              "Exportar PDF"
+              <>
+                <Download size={13} className="shrink-0" />
+                <span>Exportar PDF</span>
+              </>
             )}
           </button>
         </div>
@@ -711,95 +728,97 @@ export default function App() {
         <div className="max-w-7xl mx-auto">
           {/* TAB: CONTENT UPLOAD */}
           {activeTab === "content" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              {/* LEFT/MAIN SECTION: CONTENT CHUNKS (7 columns) */}
-              <div className="lg:col-span-7 space-y-6">
-                <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
-                  <div className="w-16 h-16 bg-[#F4EFE7] text-[#245C5A] rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileText size={32} />
-                  </div>
-                  <h2 className="text-xl font-display font-semibold text-[#2F3437] mb-2">
-                    Importar Arquivos de Conteúdo
-                  </h2>
-                  <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                    Selecione arquivos .md ou .txt contendo o texto do e-book.
-                    Eles são limpos automaticamente de marcadores técnicos
-                    obsoletos ou de distribuição.
-                  </p>
-
-                  <div className="flex justify-center gap-3">
-                    <label
-                      id="upload-content-btn"
-                      className="cursor-pointer bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm inline-flex items-center"
-                    >
-                      <Upload size={16} className="mr-2" /> Upload de Capítulos
-                      <input
-                        type="file"
-                        multiple
-                        accept=".md,.txt"
-                        className="hidden"
-                        ref={fileInputRef}
-                        onChange={handleFileUpload}
-                      />
-                    </label>
-                    <button
-                      id="add-manual-btn"
-                      onClick={addManualBlock}
-                      className="bg-white border-2 border-[#245C5A] text-[#245C5A] hover:bg-gray-50 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors inline-flex items-center"
-                    >
-                      <Plus size={16} className="mr-2" /> Bloco Manual
-                    </button>
-                  </div>
+            <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
+                <div className="w-16 h-16 bg-[#F4EFE7] text-[#245C5A] rounded-full flex items-center justify-center mx-auto mb-4 shadow-xs">
+                  <FileText size={32} />
                 </div>
+                <h2 className="text-xl font-display font-semibold text-[#2F3437] mb-2">
+                  Importar Arquivos de Conteúdo
+                </h2>
+                <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+                  Selecione arquivos .md ou .txt contendo o texto do e-book.
+                  Eles são limpos automaticamente de marcadores técnicos
+                  obsoletos ou de distribuição.
+                </p>
 
-                {blocks.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-display font-semibold text-[#2F3437] flex items-center justify-between border-b border-gray-100 pb-2">
-                      <span>
-                        Ordem e Sequenciamento ({blocks.length} blocos)
-                      </span>
-                    </h3>
-
-                    {blocks.map((block, index) => (
-                      <div
-                        key={block.id}
-                        className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
-                      >
-                        <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
-                          <div className="flex items-center gap-3">
-                            <div className="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-1 rounded">
-                              #{index + 1}
-                            </div>
-                            <span className="font-medium text-[#2F3437] text-sm">
-                              {block.filename}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => removeBlock(block.id)}
-                            className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
-                            title="Remover bloco"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                        <div className="p-0">
-                          <textarea
-                            value={block.content}
-                            onChange={(e) =>
-                              updateBlockContent(block.id, e.target.value)
-                            }
-                            className="w-full h-40 focus:ring-0 border-0 p-4 font-mono text-xs resize-y text-gray-700 bg-white"
-                            placeholder="Insira ou comente o markdown do capítulo aqui..."
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="flex justify-center gap-3">
+                  <label
+                    id="upload-content-btn"
+                    className="cursor-pointer bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm inline-flex items-center"
+                  >
+                    <Upload size={16} className="mr-2" /> Upload de Capítulos
+                    <input
+                      type="file"
+                      multiple
+                      accept=".md,.txt"
+                      className="hidden"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                    />
+                  </label>
+                  <button
+                    id="add-manual-btn"
+                    onClick={addManualBlock}
+                    className="bg-white border-2 border-[#245C5A] text-[#245C5A] hover:bg-gray-50 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors inline-flex items-center"
+                  >
+                    <Plus size={16} className="mr-2" /> Bloco Manual
+                  </button>
+                </div>
               </div>
 
-              {/* RIGHT/SIDEBAR SECTION: DESIGN & SPECS MARKDOWN SYNC (5 columns) */}
-              <div className="lg:col-span-5 space-y-6">
+              {blocks.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-display font-semibold text-[#2F3437] flex items-center justify-between border-b border-gray-100 pb-2">
+                    <span>
+                      Ordem e Sequenciamento ({blocks.length} blocos)
+                    </span>
+                  </h3>
+
+                  {blocks.map((block, index) => (
+                    <div
+                      key={block.id}
+                      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+                    >
+                      <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-1 rounded">
+                            #{index + 1}
+                          </div>
+                          <span className="font-medium text-[#2F3437] text-sm">
+                            {block.filename}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => removeBlock(block.id)}
+                          className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
+                          title="Remover bloco"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <div className="p-0">
+                        <textarea
+                          value={block.content}
+                          onChange={(e) =>
+                            updateBlockContent(block.id, e.target.value)
+                          }
+                          className="w-full h-40 focus:ring-0 border-0 p-4 font-mono text-xs resize-y text-gray-700 bg-white"
+                          placeholder="Insira ou comente o markdown do capítulo aqui..."
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: VISUAL LAYOUT & DESIGN */}
+          {activeTab === "visual" && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-7xl mx-auto">
+              {/* LEFT COLUMN: VISUAL PARAMETERS LISTING & SPECIFICATION LOADER (7 columns) */}
+              <div className="lg:col-span-7 space-y-6">
                 {/* SPECIFICATION SYNC CARD */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <div className="flex items-center gap-2 text-[#245C5A] mb-3">
@@ -809,20 +828,18 @@ export default function App() {
                     </h3>
                   </div>
 
-                  <p className="text-xs text-gray-500 mb-5 leading-relaxed">
+                  <p className="text-xs text-gray-500 mb-5 leading-relaxed font-sans">
                     Importe um arquivo de especificações/handoff (como{" "}
-                    <code>EBOOK_VISUAL_HANDOFF.md</code>) para preencher os
-                    metadados, contatos, marca, autoria e avisos automáticos do
-                    e-book.
+                    <code className="bg-gray-100 px-1 py-0.5 rounded font-mono">EBOOK_VISUAL_HANDOFF.md</code>) para preencher os
+                    metadados, marca, autoria e avisos automáticos do e-book de forma global e instantânea.
                   </p>
 
                   <div className="mb-6">
                     <label
-                      id="upload-spec-btn"
-                      className="cursor-pointer bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-4 py-3 rounded-lg font-bold transition-colors shadow-xs inline-flex items-center justify-center w-full text-sm"
+                      id="upload-visual-btn-tab"
+                      className="cursor-pointer bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-4 py-3 rounded-lg font-semibold transition-all shadow-xs inline-flex items-center justify-center w-full text-xs h-10"
                     >
-                      <Upload size={16} className="mr-2" /> Carregar
-                      Especificações Visual .md
+                      <Upload size={14} className="mr-1.5" /> Carregar Especificações Visual .md
                       <input
                         type="file"
                         accept=".md,.txt"
@@ -833,71 +850,79 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div className="border-t border-gray-100 pt-4 space-y-3 hidden">
-                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                      Parâmetros Carregados
+                  <div className="border-t border-gray-100 pt-5 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Parâmetros Visuais de Estilo Carregados:
                     </h4>
 
-                    <div className="bg-[#FAF8F4] p-3 rounded-lg space-y-2 text-xs border border-gray-100 leading-relaxed text-gray-700">
-                      <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-400">Título:</span>
-                        <span
-                          className="font-semibold text-gray-800 text-right max-w-[200px] truncate"
-                          title={settings.title}
-                        >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Título Principal</span>
+                        <span className="font-semibold text-gray-800 break-words" title={settings.title}>
                           {settings.title || "Não importado"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-400">Subtítulo:</span>
-                        <span
-                          className="font-semibold text-gray-800 text-right max-w-[200px] truncate"
-                          title={settings.subtitle}
-                        >
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Subtítulo</span>
+                        <span className="font-semibold text-gray-800 break-words" title={settings.subtitle}>
                           {settings.subtitle || "Não importado"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-400">Marca:</span>
-                        <span className="font-semibold text-gray-800 text-right truncate">
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Marca / Identidade</span>
+                        <span className="font-semibold text-gray-800 break-words">
                           {settings.brand || "Não importada"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-400">Nome Autoria:</span>
-                        <span className="font-semibold text-gray-800 text-right truncate">
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Autor(a)</span>
+                        <span className="font-semibold text-gray-800 break-words">
                           {settings.professionalName || "Não importado"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-400">
-                          Título Profissional:
-                        </span>
-                        <span
-                          className="font-semibold text-gray-500 text-right truncate text-[11px]"
-                          title={settings.professionalTitle}
-                        >
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Título Profissional</span>
+                        <span className="font-semibold text-gray-500 break-words">
                           {settings.professionalTitle || "Não importado"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-400">
-                          Registro Profissional:
-                        </span>
-                        <span className="font-semibold text-[#8A4D3B] text-right truncate">
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Conselho / Registro</span>
+                        <span className="font-semibold text-[#8A4D3B] break-words">
                           {settings.professionalReg || "Não importado"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1">
-                        <span className="text-gray-400">Site Oficial:</span>
-                        <span className="font-semibold text-[#245C5A] text-right truncate">
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Site Oficial</span>
+                        <span className="font-semibold text-[#245C5A] break-words">
                           {settings.website || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Tipo de Material</span>
+                        <span className="font-semibold text-gray-800 break-words">
+                          {settings.materialType || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
+                        <span className="text-gray-400 block mb-1">Público-Alvo</span>
+                        <span className="font-semibold text-gray-800 break-words">
+                          {settings.targetAudience || "Não importado"}
+                        </span>
+                      </div>
+                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs md:col-span-2">
+                        <span className="text-gray-400 block mb-1">Texto do Cabeçalho</span>
+                        <span className="font-semibold text-gray-800 break-words">
+                          {settings.headerText || "Texto padrão"} {settings.descriptiveHeader ? "(Com nome do capítulo)" : ""}
                         </span>
                       </div>
                     </div>
                   </div>
                 </div>
+              </div>
 
+              {/* RIGHT COLUMN: REVISION HISTORY (5 columns) */}
+              <div className="lg:col-span-5 space-y-6">
                 {/* REVISIONS HISTORY CARD */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-4">
@@ -912,13 +937,11 @@ export default function App() {
                     </span>
                   </div>
 
-                  <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                    Selecione ou alterne livremente entre as versões dos
-                    arquivos de design carregados na sessão. As configurações do
-                    PDF serão recarregadas instantaneamente.
+                  <p className="text-xs text-gray-400 mb-4 leading-relaxed font-sans">
+                    Selecione ou alterne livremente entre as versões dos arquivos de design carregados na sessão. As configurações do PDF serão recarregadas instantaneamente.
                   </p>
 
-                  <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                     {revisions.map((rev) => {
                       const isActive = rev.id === activeRevisionId;
                       return (
@@ -943,7 +966,7 @@ export default function App() {
                                   }
                                 />
                                 <span
-                                  className={`text-sm font-semibold truncate block max-w-[170px] ${isActive ? "text-[#245C5A] font-bold" : "text-gray-700"}`}
+                                  className={`text-sm font-semibold break-words whitespace-normal leading-tight ${isActive ? "text-[#245C5A] font-bold" : "text-gray-700"}`}
                                 >
                                   {rev.filename}
                                 </span>
