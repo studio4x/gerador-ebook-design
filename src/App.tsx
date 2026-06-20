@@ -27,6 +27,9 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+// Import CloudSync
+import { CloudSync } from "./components/CloudSync";
+
 export default function App() {
   const initialSettings: ProjectSettings = {
     title: "Não é Falta de Disciplina",
@@ -163,7 +166,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.11";
+  const buildVersionStr = "v1.4.16";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -520,6 +523,35 @@ export default function App() {
       const { jsPDF } = await import("jspdf");
       const html2canvas = (await import("html2canvas")).default;
 
+      // Calculate active layout values based on densityMode to feed static styles to html2canvas,
+      // bypassing css custom properties engine which fails in html2canvas
+      let bodyFontSize = '11.5pt';
+      let bodyLineHeight = '1.5';
+      let h1FontSize = '2.3rem';
+      let h2FontSize = '1.6rem';
+      let paraMargin = '1.1rem';
+      
+      if (settings.densityMode === 'compact') {
+        bodyFontSize = '10pt';
+        bodyLineHeight = '1.35';
+        h1FontSize = '1.8rem';
+        h2FontSize = '1.3rem';
+        paraMargin = '0.7rem';
+      } else if (settings.densityMode === 'premium') {
+        bodyFontSize = '12.5pt';
+        bodyLineHeight = '1.6';
+        h1FontSize = '2.6rem';
+        h2FontSize = '1.8rem';
+        paraMargin = '1.4rem';
+      }
+
+      const primaryColor = settings.primaryColor || '#245C5A';
+      const secondaryColor = settings.secondaryColor || '#C9826B';
+      const accentColor = settings.accentColor || '#6F8F9A';
+      const bgColor = settings.backgroundColor || '#FAF8F4';
+      const fontFamily = settings.fontFamily ? `${settings.fontFamily}, sans-serif` : 'Inter, sans-serif';
+      const fontDisplay = settings.fontDisplay ? `${settings.fontDisplay}, sans-serif` : 'Poppins, sans-serif';
+
       // Pre-extract stylesheet rules as oklch-free standard CSS to prevent CORS and OKLCH rendering crashes
       const cleanCss = getOklchFreeStyleString();
 
@@ -594,9 +626,108 @@ export default function App() {
               }
             });
 
-            // 3. Inject our oklch-free inline css string
+            // 3. Inject our oklch-free inline css string alongside critical block layout overrides for html2canvas compatibility
+            const layoutOverrides = `
+              :root, .page, .ebook-preview-container {
+                --color-brand-petroleo: ${primaryColor} !important;
+                --color-brand-terracota: ${secondaryColor} !important;
+                --color-brand-azul: ${accentColor} !important;
+                --color-brand-areia: ${bgColor} !important;
+                --color-brand-offwhite: ${bgColor} !important;
+                --font-sans: ${fontFamily} !important;
+                --font-display: ${fontDisplay} !important;
+                --ebook-body-size: ${bodyFontSize} !important;
+                --ebook-line-height: ${bodyLineHeight} !important;
+                --ebook-h1-size: ${h1FontSize} !important;
+                --ebook-h2-size: ${h2FontSize} !important;
+                --ebook-para-margin: ${paraMargin} !important;
+              }
+              .page {
+                display: block !important;
+                position: relative !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                max-height: 297mm !important;
+                box-sizing: border-box !important;
+                padding: 25mm 20mm !important;
+                overflow: hidden !important;
+                background-color: ${bgColor} !important;
+                font-family: ${fontFamily} !important;
+                line-height: ${bodyLineHeight} !important;
+              }
+              .ebook-content {
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: 228mm !important;
+                overflow: hidden !important;
+                font-size: ${bodyFontSize} !important;
+                line-height: ${bodyLineHeight} !important;
+              }
+              .footer-print {
+                position: absolute !important;
+                bottom: 25mm !important;
+                left: 20mm !important;
+                width: 170mm !important;
+                margin-top: 0 !important;
+                box-sizing: border-box !important;
+              }
+              .header-print {
+                display: block !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+              }
+              /* Avoid any text lines or character metrics cuts inside content items */
+              .ebook-content h1 {
+                font-size: ${h1FontSize} !important;
+                line-height: 1.25 !important;
+                margin-bottom: ${paraMargin} !important;
+                font-family: ${fontDisplay} !important;
+                color: ${primaryColor} !important;
+              }
+              .ebook-content h2 {
+                font-size: ${h2FontSize} !important;
+                line-height: 1.3 !important;
+                margin-bottom: calc(${paraMargin} * 0.8) !important;
+                font-family: ${fontDisplay} !important;
+                color: ${primaryColor} !important;
+              }
+              .ebook-content h3 {
+                font-size: calc(${h2FontSize} * 0.8) !important;
+                line-height: 1.3 !important;
+                margin-bottom: calc(${paraMargin} * 0.6) !important;
+                font-family: ${fontDisplay} !important;
+                color: ${accentColor} !important;
+              }
+              .ebook-content p, .ebook-content li {
+                font-size: ${bodyFontSize} !important;
+                line-height: ${bodyLineHeight} !important;
+                margin-bottom: ${paraMargin} !important;
+                vertical-align: top !important;
+              }
+              /* Ensure boxes style properly inside pdf rendering flow */
+              .box-reflexao {
+                background-color: ${bgColor} !important;
+                border: 1px solid var(--color-brand-linha) !important;
+                padding: 1.5rem !important;
+                border-radius: 8px !important;
+                margin: 1.5rem 0 !important;
+              }
+              .box-informativo {
+                background-color: var(--color-brand-informativo) !important;
+                padding: 1.5rem !important;
+                border-radius: 8px !important;
+                margin: 1.5rem 0 !important;
+              }
+              .box-cuidado {
+                background-color: var(--color-brand-cuidado) !important;
+                padding: 1.5rem !important;
+                border-radius: 8px !important;
+                margin: 1.5rem 0 !important;
+              }
+            `;
             const styleEl = clonedDoc.createElement("style");
-            styleEl.textContent = cleanCss;
+            styleEl.textContent = cleanCss + "\n" + layoutOverrides;
             clonedDoc.head.appendChild(styleEl);
 
             // 4. Clean any remaining inline oklch attributes inside elements for ultimate fallback
@@ -620,15 +751,35 @@ export default function App() {
         doc.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
       }
 
-      // Format filename using settings.title
+      // Format filename using settings.title preserving case and letters, removing accents
       const rawTitle = settings.title || "Ebook";
-      const sanitizedTitle = rawTitle
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]/gi, "_")
-        .substring(0, 40) || "ebook";
+      
+      const removeAccents = (str: string): string => {
+        return str
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[çÇ]/g, (match) => match === 'ç' ? 'c' : 'C');
+      };
 
-      doc.save(`${sanitizedTitle}.pdf`);
+      const sanitizeFilename = (title: string): string => {
+        const base = removeAccents(title);
+        // Remove illegal filesystem characters
+        return base
+          .replace(/[\\\/:\*\?"<>|]/g, "")
+          .trim();
+      };
+
+      const baseFilename = sanitizeFilename(rawTitle) || "Ebook";
+
+      // Track export version in localStorage based on core base name (case-insensitive key)
+      const storageKey = `ebook_export_version_${baseFilename.toLowerCase()}`;
+      const currentVersionStr = localStorage.getItem(storageKey);
+      const version = currentVersionStr ? parseInt(currentVersionStr, 10) : 1;
+
+      // Update version count for next time
+      localStorage.setItem(storageKey, String(version + 1));
+
+      doc.save(`${baseFilename}_v${version}.pdf`);
       showToast("E-book exportado para PDF com de absoluto sucesso!", "success");
     } catch (err: any) {
       console.error(err);
@@ -685,6 +836,16 @@ export default function App() {
 
         {/* OPERATIONS (Compact, size-reduced and grouped) */}
         <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <CloudSync 
+            settings={settings} 
+            blocks={blocks} 
+            setSettings={setSettings} 
+            setBlocks={setBlocks} 
+            showToast={showToast} 
+          />
+          
+          <div className="h-4 w-[1px] bg-gray-200 mx-1 hidden md:block"></div>
+          
           <button
             onClick={() => setShowClearConfirm(true)}
             className="h-8 px-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 bg-white border border-red-200 rounded-md transition-colors flex items-center gap-1"
@@ -1189,14 +1350,14 @@ export default function App() {
         id="pdf-render-offscreen"
         className="no-print"
         style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
+          position: "fixed",
+          top: "0px",
+          left: "0px",
           width: "210mm",
-          height: "1px",
-          overflow: "hidden",
-          opacity: 0,
-          zIndex: -1000,
+          height: "auto",
+          overflow: "visible",
+          opacity: 0.001,
+          zIndex: -9999,
           pointerEvents: "none",
         }}
         aria-hidden="true"

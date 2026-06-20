@@ -1,0 +1,33 @@
+{
+  "entities": {
+    "User": {
+      "attributes": {
+        "email": "string",
+        "displayName": "string",
+        "photoURL": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    "Ebook": {
+      "attributes": {
+        "userId": "string",
+        "title": "string",
+        "coverImage": "string",
+        "blocks": "string", 
+        "settings": "string",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "ebooks/{ebookId}": {
+      "schema": "Ebook",
+      "description": "Saved ebooks for a user"
+    }
+  }
+}

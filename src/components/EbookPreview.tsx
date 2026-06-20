@@ -870,7 +870,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                     : 'flex flex-col items-center gap-y-8 p-2'
               }`}
               style={{
-                zoom: viewMode === 'grid' ? undefined : `${zoom}%`,
+                zoom: (isPrintMode || viewMode === 'grid') ? undefined : `${zoom}%`,
                 width: '100%'
               }}
             >
@@ -1010,9 +1010,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                              }
                                            }, 100);
                                          }}
-                                         className="group flex items-baseline justify-between hover:text-[#C9826B] transition-colors duration-150 py-1"
+                                         className="group flex flex-row items-end justify-between hover:text-[#C9826B] transition-colors duration-150 py-1.5"
                                        >
-                                         <span className={`text-left line-clamp-1 pr-2 transition-colors duration-150 ${
+                                         <span className={`text-left pr-2 pb-0.5 transition-colors duration-150 leading-relaxed ${
                                            entry.level === 1 
                                             ? 'font-display font-bold text-[#245C5A] text-sm md:text-base group-hover:text-[#C9826B]' 
                                             : entry.level === 2

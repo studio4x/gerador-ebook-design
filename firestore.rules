@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['email', 'createdAt']) &&
+               data.email is string && data.email.size() <= 200 &&
+               (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200)) &&
+               (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500)) &&
+               data.createdAt == request.time;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && isOwner(userId) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) &&
+        (!('displayName' in incoming()) || (incoming().displayName is string && incoming().displayName.size() <= 200)) &&
+        (!('photoURL' in incoming()) || (incoming().photoURL is string && incoming().photoURL.size() <= 500));
+      allow delete: if false;
+    }
+
+    match /ebooks/{ebookId} {
+      function isValidEbook(data) {
+        return data.keys().hasAll(['userId', 'title', 'blocks', 'settings', 'createdAt', 'updatedAt']) &&
+               data.userId == request.auth.uid &&
+               data.title is string && data.title.size() <= 200 &&
+               (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() <= 500)) &&
+               data.blocks is string && data.blocks.size() <= 1048000 &&
+               data.settings is string && data.settings.size() <= 100000 &&
+               data.createdAt == request.time &&
+               data.updatedAt == request.time;
+      }
+
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(ebookId) && isValidEbook(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidId(ebookId) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'coverImage', 'blocks', 'settings', 'updatedAt']) &&
+        incoming().title is string && incoming().title.size() <= 200 &&
+        (!('coverImage' in incoming()) || (incoming().coverImage is string && incoming().coverImage.size() <= 500)) &&
+        incoming().blocks is string && incoming().blocks.size() <= 1048000 &&
+        incoming().settings is string && incoming().settings.size() <= 100000 &&
+        incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid && isValidId(ebookId);
+    }
+  }
+}
