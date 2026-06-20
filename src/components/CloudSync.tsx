@@ -81,14 +81,27 @@ export function CloudSync({
     const projectId = `${user.uid}_${safeTitle}`;
     
     try {
-      await setDoc(doc(db, "ebooks", projectId), {
-        userId: user.uid,
-        title: settings.title || "Ebook",
-        blocks: JSON.stringify(blocks),
-        settings: JSON.stringify(settings),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      const docRef = doc(db, "ebooks", projectId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        await setDoc(docRef, {
+          userId: user.uid,
+          title: settings.title || "Ebook",
+          blocks: JSON.stringify(blocks),
+          settings: JSON.stringify(settings),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } else {
+        await setDoc(docRef, {
+          userId: user.uid,
+          title: settings.title || "Ebook",
+          blocks: JSON.stringify(blocks),
+          settings: JSON.stringify(settings),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
       showToast("Projeto salvo na nuvem com sucesso!", "success");
       loadCloudProjects();
     } catch (err) {

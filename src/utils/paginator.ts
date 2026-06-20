@@ -40,7 +40,9 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     if (isBox) {
       // Boxes have surrounding margins, inner paddings, borders and text
       nodeCost += 60; // Increased to protect bottom boundary on box content
-    } else if (isH1 || isChapterOpener) {
+    } else if (isChapterOpener) {
+      nodeCost = 9999; // Occupies a full page exclusively
+    } else if (isH1) {
       nodeCost += 50;
     } else if (isH2) {
       nodeCost += 30; // Increased heading height weight
