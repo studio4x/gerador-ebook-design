@@ -82,9 +82,18 @@ export function CloudSync({
     
     try {
       const docRef = doc(db, "ebooks", projectId);
-      const docSnap = await getDoc(docRef);
+      let exists = false;
+      
+      try {
+        const docSnap = await getDoc(docRef);
+        exists = docSnap.exists();
+      } catch (e: any) {
+        // If getDoc fails due to permission errors (which happens if the doc doesn't exist
+        // or belongs to someone else), we assume it doesn't exist yet and we try to create it.
+        exists = false;
+      }
 
-      if (docSnap.exists()) {
+      if (exists) {
         await setDoc(docRef, {
           userId: user.uid,
           title: settings.title || "Ebook",

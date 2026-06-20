@@ -15,6 +15,12 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
   // Remove generic identifiers like "# Parte 1", "Parte 1", "# Bloco 1", etc alone on a line
   mergedMarkdown = mergedMarkdown.replace(/^[#\s]*(Parte|Bloco|Arquivo|Conteúdo|Cap[íi]tulo\s+Extra)\s*\d+.*$/gim, '');
 
+  // Remove yaml frontmatter block anywhere
+  mergedMarkdown = mergedMarkdown.replace(/(?:^|\n)---\r?\n([\s\S]*?)\r?\n---/g, '');
+  
+  // Remove raw frontmatter text sometimes provided by AI without --- markers
+  mergedMarkdown = mergedMarkdown.replace(/^(title|titulo):\s*["'].*?["']\s*\r?\n?(subtitle|subtitulo|author|autora):.*/gim, '');
+
   // 2. Parse Markdown to HTML
   let html = await marked.parse(mergedMarkdown, { async: true });
 
@@ -98,8 +104,11 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
         text.startsWith('** inter') ||
         text.startsWith('**fonte') ||
         text.startsWith('**nota') ||
+        (text.includes('title:') && text.includes('subtitle:')) ||
         (text.includes('titulo:') && text.includes('subtitulo:')) ||
+        (text.includes('author:') && text.includes('credencial:')) ||
         (text.includes('autora:') && text.includes('credencial:')) ||
+        (text.includes('instituicao:') || text.includes('instituição:')) ||
         ((text.startsWith('**') || text.startsWith('nota:')) && text.includes('design'))
     ) {
         // Remove metadata/instructions completely regardless of length if it matches these specific aggressive patterns

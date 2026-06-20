@@ -203,9 +203,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   // Adjust table of contents entries spacing by Density setting
   const entriesPerPage = useMemo(() => {
-    if (settings.densityMode === 'compact') return 28;
-    if (settings.densityMode === 'premium') return 16;
-    return 22; // default (comfortable)
+    if (settings.densityMode === 'compact') return 22;
+    if (settings.densityMode === 'premium') return 14;
+    return 18; // default (comfortable)
   }, [settings.densityMode]);
 
   const listSpacingClass = useMemo(() => {

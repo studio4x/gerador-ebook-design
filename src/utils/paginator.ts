@@ -139,10 +139,12 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     let shouldBreakBefore = false;
 
     if (currentPageNodes.length > 0) {
-      if (currentHeightUnits + nodeCost > activeLimit) {
+      if (isChapterOpener) {
         shouldBreakBefore = true;
-      } else if ((isH1 || isChapterOpener) && (currentHeightUnits > activeLimit * 0.88)) {
-        // Only force break on chapter start/H1 if the current page is already over 88% full
+      } else if (currentHeightUnits + nodeCost > activeLimit) {
+        shouldBreakBefore = true;
+      } else if (isH1 && (currentHeightUnits > activeLimit * 0.88)) {
+        // Only force break on H1 if the current page is already over 88% full
         shouldBreakBefore = true;
       } else if ((isH2 || isH3 || isBox) && (currentHeightUnits > activeLimit * 0.94)) {
         // Prevent orphan headings near the very bottom of the page (last 6% height)
