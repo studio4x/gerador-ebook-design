@@ -205,11 +205,70 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
     return 12; // default (comfortable)
   }, [settings.densityMode]);
 
+  // Group and paginate TOC raw entries to prevent page-breaking inside a chapter's list of sub-headings
+  const tocPagesRaw = useMemo(() => {
+    if (!hasSumario) return [];
+    if (rawTocEntries.length === 0) return [];
+    
+    // 1. Group raw entries by chapter (each group starts with a level === 1 entry)
+    const groups: { entries: typeof rawTocEntries }[] = [];
+    let currentGroup: { entries: typeof rawTocEntries } | null = null;
+    
+    rawTocEntries.forEach(entry => {
+      if (entry.level === 1 || !currentGroup) {
+        currentGroup = { entries: [entry] };
+        groups.push(currentGroup);
+      } else {
+        currentGroup.entries.push(entry);
+      }
+    });
+
+    // 2. Distribute groups across pages trying to keep groups unbroken if possible
+    const pages: (typeof rawTocEntries)[] = [];
+    let currentPage: typeof rawTocEntries = [];
+    
+    groups.forEach((group) => {
+      const isFirstPage = pages.length === 0;
+      // On page 0, the header block is present, so we slightly reduce the capacity to give more breathing room
+      const currentPageCapacity = isFirstPage ? Math.max(5, entriesPerPage - 2) : entriesPerPage;
+
+      if (currentPage.length + group.entries.length <= currentPageCapacity) {
+        currentPage.push(...group.entries);
+      } else {
+        if (currentPage.length > 0) {
+          pages.push(currentPage);
+          currentPage = [];
+        }
+        
+        const nextIsFirstPage = pages.length === 0;
+        const nextPageCapacity = nextIsFirstPage ? Math.max(5, entriesPerPage - 2) : entriesPerPage;
+        
+        if (group.entries.length > nextPageCapacity) {
+          // If a single group is larger than a blank page can hold, we must slice it
+          let tempEntries = [...group.entries];
+          while (tempEntries.length > 0) {
+            const currentCapacity = (pages.length === 0) ? Math.max(5, entriesPerPage - 2) : entriesPerPage;
+            const chunk = tempEntries.splice(0, currentCapacity);
+            pages.push(chunk);
+          }
+        } else {
+          currentPage.push(...group.entries);
+        }
+      }
+    });
+    
+    if (currentPage.length > 0) {
+      pages.push(currentPage);
+    }
+    
+    return pages;
+  }, [hasSumario, rawTocEntries, entriesPerPage]);
+
   const numSumarioPages = useMemo(() => {
     if (!hasSumario) return 0;
-    if (rawTocEntries.length === 0) return 1;
-    return Math.ceil(rawTocEntries.length / entriesPerPage);
-  }, [hasSumario, rawTocEntries, entriesPerPage]);
+    if (tocPagesRaw.length === 0) return 1;
+    return tocPagesRaw.length;
+  }, [hasSumario, tocPagesRaw]);
 
   // Calculate dynamic starting and content page boundaries
   let tempSumstart = 1;
@@ -223,16 +282,23 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
   }
   const contentStartPageNum = tempSumstart;
 
-  // Fully compiled absolute table of contents entries mapped based on the content starting index computed above
+  // Fully compiled 2D array of Table of Contents entries matching their exact page number mapping
+  const tocPagesMapped = useMemo<TocEntry[][]>(() => {
+    return tocPagesRaw.map((pageEntries) => {
+      return pageEntries.map(entry => ({
+        title: entry.title,
+        pageNumber: contentStartPageNum + entry.relativePageOffset,
+        isChapter: entry.isChapter,
+        level: entry.level,
+        domId: `content-page-${entry.relativePageOffset}`
+      }));
+    });
+  }, [tocPagesRaw, contentStartPageNum]);
+
+  // Flattened version of page-mapped TOC entries for search or other reference points
   const tocEntries = useMemo<TocEntry[]>(() => {
-    return rawTocEntries.map(entry => ({
-      title: entry.title,
-      pageNumber: contentStartPageNum + entry.relativePageOffset,
-      isChapter: entry.isChapter,
-      level: entry.level,
-      domId: `content-page-${entry.relativePageOffset}`
-    }));
-  }, [rawTocEntries, contentStartPageNum]);
+    return tocPagesMapped.flat();
+  }, [tocPagesMapped]);
 
   // Pre-calculate the current active chapter title for every content page
   const pageChapterTitles = useMemo<string[]>(() => {
@@ -900,9 +966,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
 
                        {p.type === 'sumario' && (() => {
                          const sIdx = p.sumarioPageIndex ?? 0;
-                         const startIdx = sIdx * entriesPerPage;
-                         const endIdx = startIdx + entriesPerPage;
-                         const paginatedEntries = tocEntries.slice(startIdx, endIdx);
+                         const paginatedEntries = tocPagesMapped[sIdx] || [];
                          return (
                          <section id={p.id} className="page flex flex-col justify-between scroll-mt-6 relative">
                             <div className="absolute top-0 right-0 w-48 h-48 bg-[#F4EFE7] rounded-bl-full opacity-30 -z-10"></div>
@@ -910,13 +974,17 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
                             {renderHeader(false)}
                             
                             <div className="flex-grow">
-                               <div className="mb-8 text-left border-b border-[#FAF8F4] pb-6">
-                                 <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A] block mb-1">Índice Geral</span>
-                                 <h1 className="text-4xl font-display font-bold text-[#245C5A] tracking-tight">
-                                   {sIdx === 0 ? "Sumário" : `Sumário (${sIdx + 1})`}
-                                 </h1>
-                                 <div className="w-12 h-1 bg-[#C9826B] mt-3"></div>
-                               </div>
+                               {sIdx === 0 ? (
+                                 <div className="mb-8 text-left border-b border-[#FAF8F4] pb-6">
+                                   <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A] block mb-1">Índice Geral</span>
+                                   <h1 className="text-4xl font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
+                                   <div className="w-12 h-1 bg-[#C9826B] mt-3"></div>
+                                 </div>
+                               ) : (
+                                 <div className="mb-6 pt-2 border-b border-[#FAF8F4] pb-3 text-left">
+                                   <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A]">Sumário (continuação)</span>
+                                 </div>
+                               )}
                                
                                <div className="max-w-3xl mt-6">
                                  <ul className="space-y-4">
