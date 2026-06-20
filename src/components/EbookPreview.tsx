@@ -169,7 +169,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         if (isExcluded) return;
 
         const text = heading.textContent?.trim() || '';
-        if (text && text.length > 2) {
+        // Skip headings that are too long (likely metadata or parser errors like YAML frontmatter being matched)
+        if (text && text.length > 2 && text.length < 150) {
           const tagName = heading.tagName.toLowerCase();
           
           let level = 2;
@@ -399,6 +400,10 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     '--color-brand-azul': settings.accentColor || '#6F8F9A',
     '--color-brand-areia': settings.backgroundColor || '#F4EFE7',
     '--color-brand-offwhite': settings.backgroundColor || '#FAF8F4',
+    '--color-brand-cuidado': '#DDE8E5',
+    '--color-brand-cuidado-text': '#245C5A',
+    '--color-brand-informativo': '#EAF3F1',
+    '--color-brand-linha': '#C9D8D5',
     '--font-sans': settings.fontFamily ? `${settings.fontFamily}, sans-serif` : 'Inter, sans-serif',
     '--font-display': settings.fontDisplay ? `${settings.fontDisplay}, sans-serif` : 'Poppins, sans-serif',
     '--ebook-body-size': bodyFontSize,
@@ -411,11 +416,11 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   const renderHeader = (isCoverOrFirstPage: boolean, pageIdx?: number) => {
     if (isCoverOrFirstPage) return null;
-    let headerTextVal = settings.headerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'Livro Digital'}`;
+    let headerTextVal = settings.headerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'E-book'}`;
     
     // As per user request, header should be the chapter title context
     if (pageIdx !== undefined && pageChapterTitles[pageIdx]) {
-      headerTextVal = pageChapterTitles[pageIdx];
+      headerTextVal = `${headerTextVal} | ${pageChapterTitles[pageIdx]}`;
     }
 
     const alignment = settings.headerStyle || 'left';
@@ -424,15 +429,23 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     else if (alignment === 'right') alignmentClass = 'text-right';
 
     return (
-      <div className={`text-[9pt] text-[#6F8F9A] opacity-80 border-b border-[#C9D8D5] pb-2 mb-6 header-print shrink-0 ${alignmentClass}`}>
+      <div className={`text-[9pt] font-medium text-[var(--color-brand-azul)] border-b border-[var(--color-brand-linha)] pb-2 mb-6 header-print shrink-0 ${alignmentClass}`}>
         <span>{headerTextVal}</span>
       </div>
     );
   };
 
-  const renderFooter = (pageNum: number, isCoverOrFirstPage: boolean) => {
+  const renderFooter = (pageNum: number, isCoverOrFirstPage: boolean, isSensitive: boolean = false) => {
     if (isCoverOrFirstPage) return null;
-    const footerTextVal = settings.footerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'Livro Digital'}`;
+    let footerTextVal = settings.footerText;
+    if (!footerTextVal) {
+        if (isSensitive) {
+             footerTextVal = "Conteúdo educativo. Não substitui avaliação profissional individualizada.";
+        } else {
+             const siteHost = settings.website ? settings.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : 'conexaoseres.com.br';
+             footerTextVal = `${siteHost}`;
+        }
+    }
     const footerAlign = settings.footerStyle || 'left';
     const pageNumAlign = settings.pageNumberStyle || 'right';
 
@@ -451,11 +464,11 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     let pageNumAlignClass = pageNumAlign === 'center' ? 'text-center' : pageNumAlign === 'right' ? 'text-right' : 'text-left';
 
     return (
-      <div className={`text-[10pt] text-[#6F8F9A] flex ${justifyClass} items-end border-t border-[#C9D8D5] pt-4 mt-8 footer-print shrink-0`}>
+      <div className={`text-[9pt] text-[var(--color-brand-azul)] flex ${justifyClass} items-end border-t border-[var(--color-brand-linha)] pt-4 mt-8 footer-print shrink-0`}>
          <span className={`${textOrder} ${footerTextAlignClass} flex-grow md:flex-grow-0`}>
-           {footerTextVal}
+           {footerTextVal} {footerTextVal === "Conteúdo educativo. Não substitui avaliação profissional individualizada." ? "" : " · "}
          </span>
-         <span className={`font-medium text-sm ${numOrder} ${pageNumAlignClass}`}>{pageNum}</span>
+         <span className={`font-medium text-sm ${numOrder} ${pageNumAlignClass}`}>Página {pageNum}</span>
       </div>
     );
   };

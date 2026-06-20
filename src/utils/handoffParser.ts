@@ -45,43 +45,51 @@ export function parseHandoffMarkdown(markdown: string): Partial<ProjectSettings>
   }
 
   // 3. Theme Colors (Visual Design Options)
-  const primaryColorMatch = markdown.match(/(?:Cor Primária|Menta Escura|Petróleo|Primary Color|primaryColor)[:\s]*#([A-Fa-f0-9]{6})/i);
+  const primaryColorMatch = markdown.match(/(?:Cor Primária|Menta Escura|Petróleo|Primary Color|primaryColor)[:\|\s]*#([A-Fa-f0-9]{6})/i);
   if (primaryColorMatch && primaryColorMatch[1]) {
     result.primaryColor = `#${primaryColorMatch[1]}`;
   } else {
-    const hex = findValue(/(?:primary-color|cor-primaria|cor-marca)[:\s]*(#[A-Fa-f0-9]{6})/i);
+    // If not found, try to find a color in the table row
+    const hexMatch = markdown.match(/\|[^|]*(?:Verde petróleo|Menta Escura|Prim[áa]ria)[^|]*\|[^|]*#([A-Fa-f0-9]{6})[^|]*\|/i);
+    const hex = hexMatch ? `#${hexMatch[1]}` : findValue(/(?:primary-color|cor-primaria|cor-marca)[:\s]*(#[A-Fa-f0-9]{6})/i);
     if (hex) result.primaryColor = hex;
   }
 
-  const secondaryColorMatch = markdown.match(/(?:Cor Secundária|Terracota|Secondary Color|secondaryColor)[:\s]*#([A-Fa-f0-9]{6})/i);
+  const secondaryColorMatch = markdown.match(/\|[^|]*(?:Azul acinzentado|Secund[áa]ria)[^|]*\|[^|]*#([A-Fa-f0-9]{6})[^|]*\|/i) || markdown.match(/(?:Cor Secundária|Terracota|Secondary Color|secondaryColor)[:\|\s]*#([A-Fa-f0-9]{6})/i);
   if (secondaryColorMatch && secondaryColorMatch[1]) {
     result.secondaryColor = `#${secondaryColorMatch[1]}`;
   }
 
-  const accentColorMatch = markdown.match(/(?:Cor de Destaque|Azul Sereno|Accent Color|accentColor)[:\s]*#([A-Fa-f0-9]{6})/i);
+  const accentColorMatch = markdown.match(/\|[^|]*(?:Terracota|Destaque)[^|]*\|[^|]*#([A-Fa-f0-9]{6})[^|]*\|/i) || markdown.match(/(?:Cor de Destaque|Azul Sereno|Accent Color|accentColor)[:\|\s]*#([A-Fa-f0-9]{6})/i);
   if (accentColorMatch && accentColorMatch[1]) {
     result.accentColor = `#${accentColorMatch[1]}`;
   }
 
-  const backgroundColorMatch = markdown.match(/(?:Cor de Fundo|Background Color|backgroundColor)[:\s]*#([A-Fa-f0-9]{6})/i);
+  const backgroundColorMatch = markdown.match(/\|[^|]*(?:Off-white|Fundo principal)[^|]*\|[^|]*#([A-Fa-f0-9]{6})[^|]*\|/i) || markdown.match(/(?:Cor de Fundo|Background Color|backgroundColor)[:\|\s]*#([A-Fa-f0-9]{6})/i);
   if (backgroundColorMatch && backgroundColorMatch[1]) {
     result.backgroundColor = `#${backgroundColorMatch[1]}`;
   }
 
-  const textColorMatch = markdown.match(/(?:Cor do Texto|Text Color|textColor)[:\s]*#([A-Fa-f0-9]{6})/i);
+  const textColorMatch = markdown.match(/\|[^|]*(?:Cinza grafite|Texto principal)[^|]*\|[^|]*#([A-Fa-f0-9]{6})[^|]*\|/i) || markdown.match(/(?:Cor do Texto|Text Color|textColor)[:\|\s]*#([A-Fa-f0-9]{6})/i);
   if (textColorMatch && textColorMatch[1]) {
     result.textColor = `#${textColorMatch[1]}`;
   }
 
   // 4. Typography / Fonts (Visual Styles)
-  const fontBodyMatch = findValue(/(?:Fonte Secundária|Fonte do Texto|Tipografia Corpo|fontFamily):\s*(.*)/i);
+  const fontBodyMatch = markdown.match(/(?:Texto principal|Tipografia Corpo|fontFamily)[:\s]*([a-zA-Z\s]+?)(?:\r?\n|\|)/i) || findValue(/(?:Fonte Secundária|Fonte do Texto|Tipografia Corpo|fontFamily):\s*(.*)/i);
   if (fontBodyMatch) {
-    result.fontFamily = fontBodyMatch;
+    const val = typeof fontBodyMatch === 'object' && fontBodyMatch !== null && 1 in fontBodyMatch ? fontBodyMatch[1] : fontBodyMatch;
+    if (typeof val === 'string') {
+        result.fontFamily = val.replace(/Regular|Medium|SemiBold|Bold/gi, '').trim().replace(/\*\*/g, '');
+    }
   }
 
-  const fontDisplayMatch = findValue(/(?:Fonte Primária|Fonte de Exibição|Tipografia Títulos|fontDisplay):\s*(.*)/i);
+  const fontDisplayMatch = markdown.match(/(?:Títulos e aberturas|Títulos|Tipografia Títulos|fontDisplay)[:\s]*([a-zA-Z\s]+?)(?:\r?\n|\|)/i) || findValue(/(?:Fonte Primária|Fonte de Exibição|Tipografia Títulos|fontDisplay):\s*(.*)/i);
   if (fontDisplayMatch) {
-    result.fontDisplay = fontDisplayMatch;
+    const val = typeof fontDisplayMatch === 'object' && fontDisplayMatch !== null && 1 in fontDisplayMatch ? fontDisplayMatch[1] : fontDisplayMatch;
+    if (typeof val === 'string') {
+        result.fontDisplay = val.replace(/Regular|Medium|SemiBold|Bold/gi, '').trim().replace(/\*\*/g, '');
+    }
   }
 
   // 5. Border of page (Visual Decoration)

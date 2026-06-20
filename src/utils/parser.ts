@@ -36,6 +36,10 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     else if (text.includes('resumo do capítulo') || text.includes('conceito central')) {
         wrapNextUntilHeading(heading, 'box-informativo');
     }
+    // CUIDADO / ATENÇÃO / AVISO -> box-cuidado
+    else if (text.startsWith('aviso') || text.includes('atenção') || text.includes('cuidado') || text.includes('nota importante') || text.includes('warning') || text.includes('alert')) {
+        wrapNextUntilHeading(heading, 'box-cuidado');
+    }
     // CAPÍTULOS -> force the "Chapter Opener" visual
     else if (text.startsWith('capítulo')) {
         const match = text.match(/capítulo\s*(\d+)\s*[-|:]?\s*(.*)/i);
@@ -91,10 +95,13 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
         instructionsRegex.test(text) || 
         text.startsWith('** inter') ||
         text.startsWith('**fonte') ||
-        text.startsWith('**nota')
+        text.startsWith('**nota') ||
+        (text.includes('titulo:') && text.includes('subtitulo:')) ||
+        (text.includes('autora:') && text.includes('credencial:')) ||
+        ((text.startsWith('**') || text.startsWith('nota:')) && text.includes('design'))
     ) {
-        // If it's a short instruction paragraph (less than 150 chars), remove it
-        if (text.length < 150) {
+        // Remove metadata/instructions completely regardless of length if it matches these specific aggressive patterns
+        if (text.length < 200 || (text.includes('titulo:') && text.includes('subtitulo:'))) {
             p.remove();
         }
     }
@@ -198,19 +205,26 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
             break;
           case 'author':
           case 'profissional':
+          case 'autora':
+          case 'autor':
             result.professionalName = value;
             break;
           case 'title_professional':
           case 'cargo':
-            result.professionalTitle = value;
+          case 'credencial':
+            result.professionalTitle = value; // Could be just the title or title + reg
             break;
           case 'reg':
           case 'registro':
           case 'crefito':
+          case 'crm':
+          case 'crp':
             result.professionalReg = value;
             break;
           case 'brand':
           case 'marca':
+          case 'instituicao':
+          case 'instituição':
             result.brand = value;
             break;
           case 'website':
@@ -248,11 +262,13 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
             result.ctaButtonText = value;
             break;
           case 'materialtype':
+          case 'tipo':
             result.materialType = value;
             break;
           case 'targetaudience':
           case 'publico':
-            result.targetAudience = value;
+          case 'tema':
+            result.targetAudience = value; // We can put 'tema' into targetAudience or just ignore since we don't have a specific field.
             break;
         }
       }
