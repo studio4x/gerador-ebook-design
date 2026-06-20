@@ -33,6 +33,9 @@
     border: none !important;
     page-break-after: always;
     break-after: page;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
   }
   
   /* Ensure background colors print correctly */
@@ -45,7 +48,8 @@
 /* A4 Page Simulation for screen */
 .page {
   width: 210mm;
-  min-height: 297mm;
+  height: 297mm;
+  max-height: 297mm;
   background-color: var(--color-brand-offwhite);
   color: var(--color-brand-grafite);
   margin: 2rem auto;
@@ -55,16 +59,24 @@
   padding: 25mm 20mm; /* standard A4 margins inside */
   overflow: hidden;
   font-family: var(--font-sans);
-  line-height: 1.45;
+  line-height: var(--ebook-line-height, 1.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 /* Custom Markdown Content Styling */
+.ebook-content {
+  font-size: var(--ebook-body-size, 11pt);
+  line-height: var(--ebook-line-height, 1.45);
+}
+
 .ebook-content h1 {
   font-family: var(--font-display);
-  font-size: 2.2rem;
+  font-size: var(--ebook-h1-size, 2.2rem);
   color: var(--color-brand-petroleo);
   margin-top: 0;
-  margin-bottom: 2rem;
+  margin-bottom: var(--ebook-para-margin, 1.5rem);
   font-weight: 600;
   page-break-before: always;
   break-before: page;
@@ -72,36 +84,36 @@
 
 .ebook-content h2 {
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: var(--ebook-h2-size, 1.5rem);
   color: var(--color-brand-petroleo);
-  margin-top: 2rem;
-  margin-bottom: 1rem;
+  margin-top: 1.8rem;
+  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.8);
   font-weight: 600;
 }
 
 .ebook-content h3 {
   font-family: var(--font-display);
-  font-size: 1.2rem;
+  font-size: calc(var(--ebook-h2-size, 1.5rem) * 0.8);
   color: var(--color-brand-azul);
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
+  margin-top: 1.4rem;
+  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.6);
   font-weight: 600;
 }
 
 .ebook-content p {
-  margin-bottom: 1rem;
-  font-size: 11pt;
+  margin-bottom: var(--ebook-para-margin, 1rem);
+  font-size: var(--ebook-body-size, 11pt);
 }
 
 .ebook-content ul {
   list-style-type: disc;
   padding-left: 1.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: var(--ebook-para-margin, 1rem);
 }
 
 .ebook-content li {
-  margin-bottom: 0.5rem;
-  font-size: 11pt;
+  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.5);
+  font-size: var(--ebook-body-size, 11pt);
 }
 
 .ebook-content strong {

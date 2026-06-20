@@ -5,15 +5,16 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   
   const pages: string[] = [];
   let currentPageNodes: Element[] = [];
-  let currentWords = 0;
+  let currentHeightUnits = 0;
   
+  // Custom height footprint units that map to visual space occupied under 297mm A4 bounds
   const limits = {
-    compact: { text: 500, box: 350 },
-    comfortable: { text: 400, box: 250 },
-    premium: { text: 300, box: 150 }
+    compact: 420,       // Max height units per page for compact layout
+    comfortable: 310,   // Max height units for beautiful comfortable layout
+    premium: 220        // Max height units for premium editorial layout
   };
   
-  const currentLimit = limits[mode] || limits.comfortable;
+  const activeLimit = limits[mode] || limits.comfortable;
   
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
@@ -21,32 +22,46 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     // Check if it's a chapter opener
     const isChapterOpener = node.classList.contains('chapter-opener');
-    
-    // Check if node itself is an h1 or contains an h1 directly
     const isH1 = tagName === 'h1' || node.querySelector('h1') !== null;
+    const isH2 = tagName === 'h2';
+    const isH3 = tagName === 'h3';
     
     const nodeText = node.textContent || '';
     const nodeWords = nodeText.trim().split(/\s+/).filter(x => x.length > 0).length;
     
-    const isBox = node.classList.contains('box-cuidado') || node.classList.contains('box-informativo') || node.classList.contains('box-reflexao') || node.classList.contains('frase-central');
+    const isBox = node.classList.contains('box-cuidado') || 
+                  node.classList.contains('box-informativo') || 
+                  node.classList.contains('box-reflexao') || 
+                  node.classList.contains('frase-central');
+                  
+    // Calculate custom height cost based on element margins, padding, line heights, and words
+    let nodeCost = nodeWords;
     
-    const hasBoxInCurrentPage = currentPageNodes.some(n => 
-        n.classList.contains('box-cuidado') || 
-        n.classList.contains('box-informativo') || 
-        n.classList.contains('box-reflexao') || 
-        n.classList.contains('frase-central')
-    );
-    
-    const activeWordLimit = (isBox || hasBoxInCurrentPage) ? currentLimit.box : currentLimit.text;
+    if (isBox) {
+      // Boxes have surrounding margins, inner paddings, borders and text
+      nodeCost += 75;
+    } else if (isH1 || isChapterOpener) {
+      nodeCost += 90;
+    } else if (isH2) {
+      nodeCost += 50;
+    } else if (isH3) {
+      nodeCost += 40;
+    } else if (tagName === 'p' || tagName === 'li' || tagName === 'ul' || tagName === 'ol') {
+      // Paragraphs and list items have substantial margin bottoms
+      nodeCost += 20;
+    } else {
+      nodeCost += 15;
+    }
 
     let shouldBreakBefore = false;
 
     if (currentPageNodes.length > 0) {
-      if (isH1) {
+      if (isH1 || isChapterOpener) {
         shouldBreakBefore = true;
-      } else if (currentWords + nodeWords > activeWordLimit) {
+      } else if (currentHeightUnits + nodeCost > activeLimit) {
         shouldBreakBefore = true;
-      } else if ((tagName === 'h2' || tagName === 'h3' || isBox) && (currentWords + 50 > activeWordLimit)) {
+      } else if ((isH2 || isH3 || isBox) && (currentHeightUnits > activeLimit * 0.50)) {
+        // Aesthetic rule: Avoid lonely headings (orphan control) or bulky boxes at page bottom
         shouldBreakBefore = true;
       }
     }
@@ -54,16 +69,16 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     if (shouldBreakBefore) {
       pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
       currentPageNodes = [];
-      currentWords = 0;
+      currentHeightUnits = 0;
     }
     
     currentPageNodes.push(node);
-    currentWords += nodeWords;
+    currentHeightUnits += nodeCost;
     
     if (isChapterOpener) {
        pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
        currentPageNodes = [];
-       currentWords = 0;
+       currentHeightUnits = 0;
     }
   }
   
@@ -73,3 +88,4 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   
   return pages;
 }
+

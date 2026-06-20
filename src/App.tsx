@@ -149,6 +149,50 @@ export default function App() {
     localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
   }, [blocks]);
 
+  // Build version state tracking
+  const [buildVersionObj, setBuildVersionObj] = useState(() => {
+    const saved = localStorage.getItem("ebook_build_version");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { major: 1, minor: 0, patch: 0, timestamp: Date.now() };
+  });
+
+  const buildVersionStr = `v${buildVersionObj.major}.${buildVersionObj.minor}.${buildVersionObj.patch}`;
+
+  const isFirstMount = useRef(true);
+  const prevStringified = useRef("");
+
+  useEffect(() => {
+    const currentStr = JSON.stringify({ blocks, settings });
+
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      prevStringified.current = currentStr;
+      return;
+    }
+
+    if (prevStringified.current !== currentStr) {
+      prevStringified.current = currentStr;
+      
+      const timer = setTimeout(() => {
+        setBuildVersionObj((prev: any) => {
+          const updated = {
+            ...prev,
+            patch: (prev.patch || 0) + 1,
+            timestamp: Date.now()
+          };
+          localStorage.setItem("ebook_build_version", JSON.stringify(updated));
+          return updated;
+        });
+      }, 1000); // 1s debounce to avoid rapid increments during fast active typing
+
+      return () => clearTimeout(timer);
+    }
+  }, [blocks, settings]);
+
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -617,9 +661,14 @@ export default function App() {
           <div className="w-8 h-8 rounded bg-[#245C5A] flex items-center justify-center">
             <LayoutTemplate size={18} className="text-[#F4EFE7]" />
           </div>
-          <h1 className="text-xl font-display font-semibold text-[#2F3437]">
-            Gerador de E-books Conexão Seres
-          </h1>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <h1 className="text-xl font-display font-semibold text-[#2F3437]">
+              Gerador de E-books Conexão Seres
+            </h1>
+            <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-bold tracking-wider w-fit" id="header-build-version">
+              Build {buildVersionStr}
+            </span>
+          </div>
         </div>
 
         <div className="flex bg-gray-100 p-1 rounded-lg">
@@ -1122,11 +1171,22 @@ export default function App() {
         </div>
       </main>
 
+      {/* APP OVERALL FOOTER */}
+      <footer className="bg-white border-t border-gray-200 py-4 px-6 text-center text-xs text-gray-500 no-print flex flex-col sm:flex-row justify-between items-center gap-2 mt-auto" id="app-overall-footer-el">
+        <span className="font-sans">© 2026 Conexão Seres — Editor de E-books Profissional</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-sans">Versão do App:</span>
+          <span className="font-mono bg-blue-50 text-blue-700 border border-blue-100 rounded px-2.5 py-0.5 font-bold tracking-wider text-[11px]" id="app-footer-build-version">
+            {buildVersionStr}
+          </span>
+        </div>
+      </footer>
+
       {/* RENDER PREVIEW EXACTLY FOR PRINT OR WHEN IN PREVIEW TAB */}
       <div
         className={`${activeTab === "preview" ? "block" : "hidden print:block"}`}
       >
-        <EbookPreview settings={settings} contentPages={contentPages} />
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} />
       </div>
 
       {/* Container invisível exclusivo para renderização e exportação direta de PDF */}
@@ -1142,7 +1202,7 @@ export default function App() {
         }}
         aria-hidden="true"
       >
-        <EbookPreview settings={settings} contentPages={contentPages} />
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} />
       </div>
 
       {/* GLOBAL NOTIFICATION TOAST */}

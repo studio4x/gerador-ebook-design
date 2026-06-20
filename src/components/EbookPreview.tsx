@@ -5,6 +5,7 @@ import { BookOpen } from 'lucide-react';
 interface EbookPreviewProps {
   settings: ProjectSettings;
   contentPages: string[];
+  buildVersion?: string;
 }
 
 interface TocEntry {
@@ -14,7 +15,7 @@ interface TocEntry {
   domId: string;
 }
 
-export function EbookPreview({ settings, contentPages }: EbookPreviewProps) {
+export function EbookPreview({ settings, contentPages, buildVersion }: EbookPreviewProps) {
   useEffect(() => {
     const fontsToLoad = [];
     if (settings.fontFamily) {
@@ -167,6 +168,27 @@ export function EbookPreview({ settings, contentPages }: EbookPreviewProps) {
   const ctaPageNum = contentStartPageNum + contentPages.length;
   const finalPageNum = ctaPageNum + (settings.ctaText ? 1 : 0);
 
+  // Compute specific CSS layout variables depending on Density mode for precise reading sizes
+  let bodyFontSize = '11.5pt';
+  let bodyLineHeight = '1.5';
+  let h1FontSize = '2.3rem';
+  let h2FontSize = '1.6rem';
+  let paraMargin = '1.1rem';
+  
+  if (settings.densityMode === 'compact') {
+    bodyFontSize = '10pt';
+    bodyLineHeight = '1.35';
+    h1FontSize = '1.8rem';
+    h2FontSize = '1.3rem';
+    paraMargin = '0.7rem';
+  } else if (settings.densityMode === 'premium') {
+    bodyFontSize = '12.5pt';
+    bodyLineHeight = '1.6';
+    h1FontSize = '2.6rem';
+    h2FontSize = '1.8rem';
+    paraMargin = '1.4rem';
+  }
+
   const customStyles = {
     '--color-brand-petroleo': settings.primaryColor || '#245C5A',
     '--color-brand-terracota': settings.secondaryColor || '#C9826B',
@@ -175,6 +197,11 @@ export function EbookPreview({ settings, contentPages }: EbookPreviewProps) {
     '--color-brand-offwhite': settings.backgroundColor || '#FAF8F4',
     '--font-sans': settings.fontFamily ? `${settings.fontFamily}, sans-serif` : 'Inter, sans-serif',
     '--font-display': settings.fontDisplay ? `${settings.fontDisplay}, sans-serif` : 'Poppins, sans-serif',
+    '--ebook-body-size': bodyFontSize,
+    '--ebook-line-height': bodyLineHeight,
+    '--ebook-h1-size': h1FontSize,
+    '--ebook-h2-size': h2FontSize,
+    '--ebook-para-margin': paraMargin,
     border: settings.pageBorder ? '1px solid #C9D8D5' : undefined,
   } as React.CSSProperties;
 
@@ -215,7 +242,14 @@ export function EbookPreview({ settings, contentPages }: EbookPreviewProps) {
 
     return (
       <div className={`text-[10pt] text-[#6F8F9A] flex ${justifyClass} items-end border-t border-[#C9D8D5] pt-4 mt-8 footer-print shrink-0`}>
-         <span className={`${textOrder} ${footerTextAlignClass} flex-grow md:flex-grow-0`}>{footerTextVal}</span>
+         <span className={`${textOrder} ${footerTextAlignClass} flex-grow md:flex-grow-0`}>
+           {footerTextVal}
+           {buildVersion && (
+             <span className="text-[8pt] text-[#8ea7b0] font-mono ml-2 border-l border-[#C9D8D5] pl-2 opacity-80" id="ebook-footer-build-version">
+               Build: {buildVersion}
+             </span>
+           )}
+         </span>
          <span className={`font-medium text-sm ${numOrder} ${pageNumAlignClass}`}>{pageNum}</span>
       </div>
     );
