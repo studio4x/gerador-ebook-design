@@ -100,8 +100,8 @@ export function parseHandoffMarkdown(markdown: string): Partial<ProjectSettings>
 
   // 6. Header Text from Visual Configuration/Layout Handoff
   const headerTxt = findValue(/(?:\*\*Cabeçalho\*\*|\*\*Texto do Cabeçalho\*\*|Cabeçalho|Header|Header\s*Text):\s*(?:["']?)([^"'\n]+)(?:["']?)/i);
-  if (headerTxt) {
-    result.headerText = headerTxt.replace(/^["']|["']$/g, '');
+  if (headerTxt && !headerTxt.toLowerCase().includes('inter') && !headerTxt.toLowerCase().includes('poppins') && !headerTxt.toLowerCase().includes('sans')) {
+    result.headerText = headerTxt.replace(/^["']|["']$/g, '').trim().replace(/^\*\*|\*\*$/g, '');
   }
 
   // 6b. Descriptive Header option (Inserts active chapter name into page headers)
@@ -125,8 +125,8 @@ export function parseHandoffMarkdown(markdown: string): Partial<ProjectSettings>
 
   // 7. Footer Text from Visual Configuration/Layout Handoff
   const footerTxt = findValue(/(?:\*\*Rodapé\*\*|\*\*Texto do Rodapé\*\*|Rodapé|Footer|Footer\s*Text):\s*(?:["']?)([^"'\n]+)(?:["']?)/i);
-  if (footerTxt) {
-    result.footerText = footerTxt.replace(/^["']|["']$/g, '');
+  if (footerTxt && !footerTxt.toLowerCase().includes('inter') && !footerTxt.toLowerCase().includes('poppins') && !footerTxt.toLowerCase().includes('sans')) {
+    result.footerText = footerTxt.replace(/^["']|["']$/g, '').trim().replace(/^\*\*|\*\*$/g, '');
   }
 
   // 8. Header Alignment (left/center/right)

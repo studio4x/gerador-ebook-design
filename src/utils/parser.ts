@@ -42,10 +42,12 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     }
     // CAPÍTULOS -> force the "Chapter Opener" visual
     else if (text.startsWith('capítulo')) {
-        const match = text.match(/capítulo\s*(\d+)\s*[-|:]?\s*(.*)/i);
+        const match = text.match(/capítulo\s*(\d+)\s*[-|:—–]*\s*(.*)/i);
         if (match) {
             const num = match[1];
-            const title = match[2];
+            let title = match[2];
+            // Remove any leading punctuation that might have slipped through
+            title = title.replace(/^[-|:—–]+\s*/, '').trim();
             
             const opener = doc.createElement('div');
             opener.className = 'chapter-opener';
@@ -183,22 +185,23 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
   const mergedMarkdown = blocks.map(b => b.content).join('\n\n');
 
   // 1. Yaml-based frontmatter parser
-  const frontmatterMatch = mergedMarkdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (frontmatterMatch) {
-    const yamlContent = frontmatterMatch[1];
-    const lines = yamlContent.split('\n');
-    lines.forEach(line => {
-      const parts = line.split(':');
-      if (parts.length >= 2) {
-        const key = parts[0].trim().toLowerCase();
-        const value = parts.slice(1).join(':').trim().replace(/^["']|["']$/g, '');
-        
-        switch(key) {
-          case 'title':
-          case 'titulo':
-            result.title = value;
-            result.shortTitle = value;
-            break;
+  for (const block of blocks) {
+    const frontmatterMatch = block.content.match(/(?:^|\n)---\r?\n([\s\S]*?)\r?\n---/);
+    if (frontmatterMatch) {
+      const yamlContent = frontmatterMatch[1];
+      const lines = yamlContent.split('\n');
+      lines.forEach(line => {
+        const parts = line.split(':');
+        if (parts.length >= 2) {
+          const key = parts[0].trim().toLowerCase();
+          const value = parts.slice(1).join(':').trim().replace(/^["']|["']$/g, '');
+          
+          switch(key) {
+            case 'title':
+            case 'titulo':
+              result.title = value;
+              result.shortTitle = value;
+              break;
           case 'subtitle':
           case 'subtitulo':
             result.subtitle = value;
@@ -274,6 +277,7 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
       }
     });
   }
+}
 
   // 2. Line scanner for non-frontmatter files
   const lines = mergedMarkdown.split('\n');

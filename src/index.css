@@ -182,14 +182,48 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   min-height: 100%;
+  width: 100%;
+  position: relative;
 }
+
+.chapter-opener::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-brand-offwhite);
+  z-index: -1;
+  margin: -48px -48px -48px -48px; /* Extend to cover page padding if needed */
+}
+
 .chapter-number {
-  font-size: 8rem;
+  font-size: 6rem;
   font-weight: 700;
-  color: var(--color-brand-areia);
+  color: var(--color-brand-cuidado); /* lighter accent */
   line-height: 1;
-  margin-bottom: 1rem;
-  margin-left: -5px;
+  margin-bottom: 1.5rem;
+  font-family: var(--font-display);
+}
+
+.chapter-opener h1 {
+  font-size: 2.25rem !important;
+  color: var(--color-brand-petroleo) !important;
+  font-weight: 600 !important;
+  margin-bottom: 1.5rem !important;
+  position: relative;
+  z-index: 1;
+}
+
+.chapter-opener::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 2px;
+  background-color: var(--color-brand-linha);
+  margin-top: 1.5rem;
 }
