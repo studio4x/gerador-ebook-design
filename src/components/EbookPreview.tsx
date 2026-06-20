@@ -22,6 +22,7 @@ interface EbookPreviewProps {
   settings: ProjectSettings;
   contentPages: string[];
   buildVersion?: string;
+  isPrintMode?: boolean;
 }
 
 interface TocEntry {
@@ -32,10 +33,10 @@ interface TocEntry {
   level?: number;
 }
 
-export function EbookPreview({ settings, contentPages, buildVersion }: EbookPreviewProps) {
-  const [viewMode, setViewMode] = useState<'scroll' | 'book' | 'grid'>('scroll');
-  const [zoom, setZoom] = useState<number>(55);
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode = false }: EbookPreviewProps) {
+  const [viewMode, setViewMode] = useState<'scroll' | 'book' | 'grid'>(isPrintMode ? 'scroll' : 'scroll');
+  const [zoom, setZoom] = useState<number>(isPrintMode ? 100 : 55);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(isPrintMode ? false : true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showInstructions, setShowInstructions] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -54,6 +55,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
 
   // Automatically adjust default layout representation on smaller screen devices
   useEffect(() => {
+    if (isPrintMode) return;
     if (typeof window !== 'undefined') {
       if (window.innerWidth < 1024) {
         setSidebarOpen(false);
@@ -62,7 +64,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
         setZoom(55);
       }
     }
-  }, []);
+  }, [isPrintMode]);
 
   useEffect(() => {
     const fontsToLoad = [];
@@ -200,9 +202,15 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
 
   // Adjust table of contents entries spacing by Density setting
   const entriesPerPage = useMemo(() => {
-    if (settings.densityMode === 'compact') return 16;
-    if (settings.densityMode === 'premium') return 9;
-    return 12; // default (comfortable)
+    if (settings.densityMode === 'compact') return 28;
+    if (settings.densityMode === 'premium') return 16;
+    return 22; // default (comfortable)
+  }, [settings.densityMode]);
+
+  const listSpacingClass = useMemo(() => {
+    if (settings.densityMode === 'compact') return 'space-y-1.5';
+    if (settings.densityMode === 'premium') return 'space-y-3.5';
+    return 'space-y-2.5'; // comfortable default
   }, [settings.densityMode]);
 
   // Group and paginate TOC raw entries to prevent page-breaking inside a chapter's list of sub-headings
@@ -230,7 +238,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
     groups.forEach((group) => {
       const isFirstPage = pages.length === 0;
       // On page 0, the header block is present, so we slightly reduce the capacity to give more breathing room
-      const currentPageCapacity = isFirstPage ? Math.max(5, entriesPerPage - 2) : entriesPerPage;
+      const currentPageCapacity = isFirstPage ? Math.max(8, entriesPerPage - 4) : entriesPerPage;
 
       if (currentPage.length + group.entries.length <= currentPageCapacity) {
         currentPage.push(...group.entries);
@@ -241,13 +249,13 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
         }
         
         const nextIsFirstPage = pages.length === 0;
-        const nextPageCapacity = nextIsFirstPage ? Math.max(5, entriesPerPage - 2) : entriesPerPage;
+        const nextPageCapacity = nextIsFirstPage ? Math.max(8, entriesPerPage - 4) : entriesPerPage;
         
         if (group.entries.length > nextPageCapacity) {
           // If a single group is larger than a blank page can hold, we must slice it
           let tempEntries = [...group.entries];
           while (tempEntries.length > 0) {
-            const currentCapacity = (pages.length === 0) ? Math.max(5, entriesPerPage - 2) : entriesPerPage;
+            const currentCapacity = (pages.length === 0) ? Math.max(8, entriesPerPage - 4) : entriesPerPage;
             const chunk = tempEntries.splice(0, currentCapacity);
             pages.push(chunk);
           }
@@ -610,6 +618,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
       `}</style>
 
       {/* PREVIEW INTERACTIVE CONTROL BAR (Only displayed inside web app preview) */}
+      {!isPrintMode && (
       <header className="no-print bg-white border border-gray-200/90 rounded-2xl p-3 mb-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm sticky top-[64px] z-40 bg-opacity-95 backdrop-blur-md">
          {/* Left Side: Collapse outline panel + ViewMode toggles */}
          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
@@ -753,12 +762,13 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
             )}
          </div>
       </header>
+      )}
 
       {/* WORKSPACE FLEXBOX STRUCTURE */}
       <div className="no-print-layout flex flex-col lg:flex-row gap-6 relative items-start">
          
          {/* OUTLINE NAVIGATOR (SIDEBAR) */}
-         {sidebarOpen && (
+         {!isPrintMode && sidebarOpen && (
             <aside className="w-full lg:w-[240px] xl:w-[270px] bg-white border border-gray-200/80 rounded-2xl shadow-xs p-4 no-print lg:sticky lg:top-[138px] lg:h-[calc(100vh-180px)] overflow-y-auto shrink-0 space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Sumário Interativo</span>
@@ -829,7 +839,7 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
          {/* PREVIEW CONTAINER CANVAS */}
          <div className="flex-grow min-w-0 flex flex-col items-center w-full">
             {/* Advice instructions helper card (Dismissible) */}
-            {showInstructions && (
+            {!isPrintMode && showInstructions && (
               <div className="no-print bg-[#FAF8F4]/95 border border-[#C9D8D5]/70 rounded-xl p-3 mb-5 w-full text-xs text-gray-600 leading-normal max-w-4xl shadow-2xs relative flex items-start sm:items-center justify-between gap-3 transition-all">
                 <div className="flex-grow">
                   <div className="flex items-center gap-1.5 font-bold text-[#245C5A] mb-1">
@@ -974,20 +984,16 @@ export function EbookPreview({ settings, contentPages, buildVersion }: EbookPrev
                             {renderHeader(false)}
                             
                             <div className="flex-grow">
-                               {sIdx === 0 ? (
+                               {sIdx === 0 && (
                                  <div className="mb-8 text-left border-b border-[#FAF8F4] pb-6">
                                    <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A] block mb-1">Índice Geral</span>
                                    <h1 className="text-4xl font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
                                    <div className="w-12 h-1 bg-[#C9826B] mt-3"></div>
                                  </div>
-                               ) : (
-                                 <div className="mb-6 pt-2 border-b border-[#FAF8F4] pb-3 text-left">
-                                   <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A]">Sumário (continuação)</span>
-                                 </div>
                                )}
                                
-                               <div className="max-w-3xl mt-6">
-                                 <ul className="space-y-4">
+                               <div className={`max-w-3xl ${sIdx === 0 ? 'mt-6' : 'mt-2'}`}>
+                                 <ul className={listSpacingClass}>
                                    {paginatedEntries.map((entry, idx) => (
                                      <li key={`${entry.domId}-${sIdx}-${idx}`}>
                                        <a 

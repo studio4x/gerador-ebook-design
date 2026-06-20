@@ -163,7 +163,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.8";
+  const buildVersionStr = "v1.4.11";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -581,7 +581,7 @@ export default function App() {
               clonedOffscreen.style.opacity = "1";
             }
 
-            // 2. Remove Tailwind links & style tag blocks in clone to prevent color parsing and iframe loading CORS errors
+            // 2. Remove conflicting CSS links and style tag blocks to prevent color parsing errors in html2canvas
             const styledLinks = clonedDoc.querySelectorAll("link[rel='stylesheet'], style");
             styledLinks.forEach((el) => {
               if (el.tagName.toLowerCase() === "link") {
@@ -1201,7 +1201,7 @@ export default function App() {
         }}
         aria-hidden="true"
       >
-        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} />
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} isPrintMode={true} />
       </div>
 
       {/* GLOBAL NOTIFICATION TOAST */}
