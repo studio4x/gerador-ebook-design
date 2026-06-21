@@ -154,17 +154,35 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
 
     if (shouldBreakBefore) {
       // Check for orphan headings at the end of the page
+      // A heading needs at least 2 non-heading elements after it on the same page.
       const orphanNodes: Element[] = [];
-      while (currentPageNodes.length > 0) {
-        const lastNode = currentPageNodes[currentPageNodes.length - 1];
+      let popCount = 0;
+      let nonHeadingCount = 0;
+
+      for (let j = currentPageNodes.length - 1; j >= 0; j--) {
+        const lastNode = currentPageNodes[j];
         const lastTagName = lastNode.tagName.toLowerCase();
-        if (['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName)) {
-          // It's a heading! We cannot leave it alone at the bottom of the page.
-          orphanNodes.unshift(currentPageNodes.pop()!);
-          // Note: we don't bother adjusting currentHeightUnits since we reset it anyway
+        const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
+        
+        if (isHeading) {
+          if (nonHeadingCount < 2) {
+            popCount = currentPageNodes.length - j;
+          } else {
+            break;
+          }
         } else {
-          break; // Not a heading, stop popping
+          nonHeadingCount++;
+          if (nonHeadingCount >= 2 && popCount === 0) {
+            break;
+          }
         }
+      }
+
+      if (popCount > 0 && popCount < currentPageNodes.length) {
+        const popped = currentPageNodes.splice(currentPageNodes.length - popCount, popCount);
+        orphanNodes.push(...popped);
+      } else if (popCount === currentPageNodes.length) {
+        // the entire page cannot be orphans. Leave it.
       }
 
       if (currentPageNodes.length > 0) {
@@ -175,7 +193,18 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
       // Recalculate height for the orphans we carried over
       currentHeightUnits = orphanNodes.reduce((acc, n) => {
           const t = n.tagName.toLowerCase();
-          return acc + (t === 'h1' ? 50 : t === 'h2' ? 30 : 25);
+          const isChap = n.classList.contains('chapter-opener');
+          const isBx = n.classList.contains('box-cuidado') || n.classList.contains('box-informativo') || n.classList.contains('box-reflexao');
+          const textWords = (n.textContent || '').trim().split(/\s+/).filter(x => x.length > 0).length;
+          let cost = textWords;
+          if (isBx) cost += 60;
+          else if (isChap) cost = 9999;
+          else if (t === 'h1' || n.querySelector('h1')) cost += 50;
+          else if (t === 'h2') cost += 30;
+          else if (t === 'h3') cost += 25;
+          else if (t === 'p' || t === 'li' || t === 'ul' || t === 'ol') cost += 14;
+          else cost += 8;
+          return acc + cost;
       }, 0);
     }
     

@@ -203,15 +203,15 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   // Adjust table of contents entries spacing by Density setting
   const entriesPerPage = useMemo(() => {
-    if (settings.densityMode === 'compact') return 22;
-    if (settings.densityMode === 'premium') return 14;
-    return 18; // default (comfortable)
+    if (settings.densityMode === 'compact') return 18;
+    if (settings.densityMode === 'premium') return 10;
+    return 14; // default (comfortable)
   }, [settings.densityMode]);
 
   const listSpacingClass = useMemo(() => {
-    if (settings.densityMode === 'compact') return 'space-y-1.5';
-    if (settings.densityMode === 'premium') return 'space-y-3.5';
-    return 'space-y-2.5'; // comfortable default
+    if (settings.densityMode === 'compact') return 'space-y-2';
+    if (settings.densityMode === 'premium') return 'space-y-4';
+    return 'space-y-3'; // comfortable default
   }, [settings.densityMode]);
 
   // Group and paginate TOC raw entries to prevent page-breaking inside a chapter's list of sub-headings
@@ -239,7 +239,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     groups.forEach((group) => {
       const isFirstPage = pages.length === 0;
       // On page 0, the header block is present, so we slightly reduce the capacity to give more breathing room
-      const currentPageCapacity = isFirstPage ? Math.max(8, entriesPerPage - 4) : entriesPerPage;
+      const currentPageCapacity = isFirstPage ? Math.max(6, entriesPerPage - 6) : entriesPerPage;
 
       if (currentPage.length + group.entries.length <= currentPageCapacity) {
         currentPage.push(...group.entries);
@@ -250,13 +250,13 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         }
         
         const nextIsFirstPage = pages.length === 0;
-        const nextPageCapacity = nextIsFirstPage ? Math.max(8, entriesPerPage - 4) : entriesPerPage;
+        const nextPageCapacity = nextIsFirstPage ? Math.max(6, entriesPerPage - 6) : entriesPerPage;
         
         if (group.entries.length > nextPageCapacity) {
           // If a single group is larger than a blank page can hold, we must slice it
           let tempEntries = [...group.entries];
           while (tempEntries.length > 0) {
-            const currentCapacity = (pages.length === 0) ? Math.max(8, entriesPerPage - 4) : entriesPerPage;
+            const currentCapacity = (pages.length === 0) ? Math.max(6, entriesPerPage - 6) : entriesPerPage;
             const chunk = tempEntries.splice(0, currentCapacity);
             pages.push(chunk);
           }

@@ -33,6 +33,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
   
   headings.forEach((heading) => {
     const text = heading.textContent?.toLowerCase() || '';
+    const originalText = heading.textContent || '';
 
     // PAUSA PARA REFLEXÃO -> box-reflexao
     if (text.includes('pausa para reflexão') || text.includes('para refletir') || text.includes('perguntas para reflexão')) {
@@ -48,18 +49,28 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     }
     // CAPÍTULOS -> force the "Chapter Opener" visual
     else if (text.startsWith('capítulo')) {
-        const match = text.match(/capítulo\s*(\d+)\s*[-|:—–]*\s*(.*)/i);
+        const match = originalText.match(/Capítulo\s*(\d+)\s*[-|:—–]*\s*(.*)/i);
         if (match) {
             const num = match[1];
-            let title = match[2];
+            let title = match[2] || '';
             // Remove any leading punctuation that might have slipped through
             title = title.replace(/^[-|:—–]+\s*/, '').trim();
+            
+            // If the title is empty on the heading, the AI might have provided it on the next line
+            if (!title && heading.nextElementSibling) {
+                const nextTag = heading.nextElementSibling.tagName.toLowerCase();
+                if (nextTag === 'p' || nextTag === 'h1' || nextTag === 'h2' || nextTag === 'h3' || nextTag === 'h4') {
+                    // It's very likely the title
+                    title = heading.nextElementSibling.textContent?.trim() || '';
+                    heading.parentNode?.removeChild(heading.nextElementSibling);
+                }
+            }
             
             const opener = doc.createElement('div');
             opener.className = 'chapter-opener';
             opener.innerHTML = `
                 <div class="chapter-number">${num.padStart(2, '0')}</div>
-                <h1 style="border:none; margin:0; padding:0">${title || text}</h1>
+                <h1 style="border:none; margin:0; padding:0">${title || originalText}</h1>
             `;
             heading.parentNode?.replaceChild(opener, heading);
         }
@@ -387,7 +398,20 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
   // CTA text body
   const ctaHeaderMatch = mergedMarkdown.match(/(?:#|##|###)\s*(?:um convite|chamada para ação|fale conosco|fale com a conexão seres|sobre o agendamento|cta)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:#|##|###|\n|$))/i);
   if (ctaHeaderMatch && ctaHeaderMatch[1] && !result.ctaText) {
-    result.ctaText = ctaHeaderMatch[1].trim();
+    let rawText = ctaHeaderMatch[1].trim();
+    
+    // Look for a Markdown link to extract for the CTA button
+    const linkMatch = rawText.match(/\[(.*?)\]\((https?:\/\/[^\s]+)\)/);
+    if (linkMatch) {
+      if (!result.ctaButtonText) result.ctaButtonText = linkMatch[1].replace(/[*_]/g, '');
+      if (!result.schedulingUrl && !result.whatsapp) {
+         result.schedulingUrl = linkMatch[2]; // Use as primary url for button
+      }
+      // Remove the markdown link from the text body so we don't render "[label](url)" literally
+      rawText = rawText.replace(linkMatch[0], '').trim();
+    }
+    
+    result.ctaText = rawText;
   }
 
   return result;

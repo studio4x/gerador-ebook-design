@@ -43,6 +43,22 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  
+  a[href]::after {
+    content: none !important;
+  }
+}
+
+.page-break, .chapter-opener {
+  break-before: page;
+}
+
+.avoid-break, .box-cuidado, .box-informativo, .box-reflexao, blockquote, img, table, ul, ol {
+  break-inside: avoid;
+}
+
+h1, h2, h3, h4, h5 {
+  break-after: avoid;
 }
 
 /* A4 Page Simulation for screen */
@@ -56,7 +72,7 @@
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   position: relative;
   box-sizing: border-box;
-  padding: 25mm 20mm; /* standard A4 margins inside */
+  padding: 30mm 20mm 20mm 30mm; /* ABNT: top 3cm, right 2cm, bottom 2cm, left 3cm */
   overflow: hidden;
   font-family: var(--font-sans);
   line-height: var(--ebook-line-height, 1.45);
@@ -104,6 +120,18 @@
 .ebook-content p {
   margin-bottom: var(--ebook-para-margin, 1rem);
   font-size: var(--ebook-body-size, 11pt);
+  text-align: justify;
+  line-height: 1.5;
+  text-indent: 1.25cm;
+}
+
+.ebook-content .box-reflexao p,
+.ebook-content .box-informativo p,
+.ebook-content .box-cuidado p,
+.ebook-content .chapter-opener p,
+.chapter-opener p,
+.frase-central p {
+  text-indent: 0; /* Reset indent inside special boxes */
 }
 
 .ebook-content ul {
@@ -122,7 +150,38 @@
   color: var(--color-brand-petroleo);
 }
 
+.ebook-content blockquote {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  margin-left: 4cm;
+  padding: 0;
+  border: none;
+  font-size: 10pt;
+  line-height: 1.15;
+  text-align: justify;
+}
+
+.ebook-content blockquote p {
+  text-indent: 0;
+  font-size: 10pt;
+  line-height: 1.15;
+}
+
 /* Custom Boxes */
+.page-content {
+  /* No changes yet */
+}
+
+.page-content:has(.chapter-opener) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.page-content:has(.chapter-opener) > .chapter-opener {
+  flex-grow: 1;
+}
+
 .box-cuidado {
   background-color: var(--color-brand-cuidado);
   border: 1px solid var(--color-brand-linha);
