@@ -167,7 +167,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.37";
+  const buildVersionStr = "v1.4.38";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -526,7 +526,10 @@ export default function App() {
       
       const elements = Array.from(doc.body.children);
       for (const el of elements) {
-        if (['h1', 'h2', 'h3', 'h4', 'h5'].includes(el.tagName.toLowerCase())) {
+        const isChapterOpener = el.tagName.toLowerCase() === 'div' && el.classList.contains('chapter-opener');
+        const isH1 = el.tagName.toLowerCase() === 'h1';
+        
+        if (isChapterOpener || isH1) {
           if (currentBody.trim().length > 0) {
               chapters.push({ title: currentTitle, htmlBody: currentBody });
           }

@@ -57,7 +57,6 @@ export async function generateEpub(options: EpubOptions): Promise<Blob> {
   <title>${escapeXml(chapter.title)}</title>
 </head>
 <body>
-  <h1>${escapeXml(chapter.title)}</h1>
   ${chapter.htmlBody}
 </body>
 </html>`;
