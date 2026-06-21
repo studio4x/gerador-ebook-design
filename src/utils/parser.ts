@@ -358,25 +358,31 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
     if (regVal) result.professionalReg = regVal;
   }
 
+  const extractContactVal = (val: string) => {
+      const match = val.match(/\[.*?\]\((.*?)\)/);
+      if (match) return match[1];
+      return val.replace(/[<>\*]/g, '').trim();
+  };
+
   // Contacts
   if (!result.website) {
-    const siteVal = findValueInLines(/(?:Site|Website):\s*(https?:\/\/[^\s]+)/i);
-    if (siteVal) result.website = siteVal;
+    const siteVal = findValueInLines(/(?:Site|Website):\s*(.*)/i);
+    if (siteVal) result.website = extractContactVal(siteVal);
   }
 
   if (!result.whatsapp) {
-    const whatsappVal = findValueInLines(/(?:WhatsApp|Whats):\s*(https?:\/\/[^\s]+|wa\.me\/\S+)/i);
-    if (whatsappVal) result.whatsapp = whatsappVal;
+    const whatsappVal = findValueInLines(/(?:WhatsApp|Whats):\s*(.*)/i);
+    if (whatsappVal) result.whatsapp = extractContactVal(whatsappVal);
   }
 
   if (!result.email) {
-    const emailVal = findValueInLines(/(?:E-mail|Email):\s*(\S+@\S+\.\S+)/i);
-    if (emailVal) result.email = emailVal;
+    const emailVal = findValueInLines(/(?:E-mail|Email):\s*(.*)/i);
+    if (emailVal) result.email = extractContactVal(emailVal);
   }
 
   if (!result.instagram) {
-    const instaVal = findValueInLines(/(?:Instagram):\s*(@?\S+)/i);
-    if (instaVal) result.instagram = instaVal;
+    const instaVal = findValueInLines(/(?:Instagram|Insta):\s*(.*)/i);
+    if (instaVal) result.instagram = extractContactVal(instaVal);
   }
 
   if (!result.contactAddress) {

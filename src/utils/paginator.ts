@@ -16,6 +16,68 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   
   const activeLimit = limits[mode] || limits.comfortable;
   
+  const flushPage = () => {
+    // Check for orphan headings at the end of the page
+    // A heading needs at least 2 non-heading elements after it on the same page.
+    const orphanNodes: Element[] = [];
+    let popCount = 0;
+    let nonHeadingCount = 0;
+
+    for (let j = currentPageNodes.length - 1; j >= 0; j--) {
+      const lastNode = currentPageNodes[j];
+      const lastTagName = lastNode.tagName.toLowerCase();
+      const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
+      
+      if (isHeading) {
+        if (nonHeadingCount < 2) {
+          popCount = currentPageNodes.length - j;
+        } else {
+          break;
+        }
+      } else {
+        if (lastTagName === 'ul' || lastTagName === 'ol') {
+          nonHeadingCount += lastNode.querySelectorAll('li').length;
+        } else if (lastTagName === 'div' && (lastNode.classList.contains('box-cuidado') || lastNode.classList.contains('box-informativo') || lastNode.classList.contains('box-reflexao'))) {
+          nonHeadingCount += lastNode.querySelectorAll('p, li').length;
+        } else {
+          nonHeadingCount++;
+        }
+        
+        if (nonHeadingCount >= 2 && popCount === 0) {
+          break;
+        }
+      }
+    }
+
+    if (popCount > 0 && popCount < currentPageNodes.length) {
+      const popped = currentPageNodes.splice(currentPageNodes.length - popCount, popCount);
+      orphanNodes.push(...popped);
+    }
+
+    if (currentPageNodes.length > 0) {
+        pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
+    }
+    
+    currentPageNodes = [...orphanNodes];
+    
+    // Recalculate height for the orphans we carried over
+    currentHeightUnits = orphanNodes.reduce((acc, n) => {
+        const t = n.tagName.toLowerCase();
+        const isChap = n.classList.contains('chapter-opener');
+        const isBx = n.classList.contains('box-cuidado') || n.classList.contains('box-informativo') || n.classList.contains('box-reflexao');
+        const textWords = (n.textContent || '').trim().split(/\s+/).filter(x => x.length > 0).length;
+        let cost = textWords;
+        if (isBx) cost += 60;
+        else if (isChap) cost = 9999;
+        else if (t === 'h1' || n.querySelector('h1')) cost += 50;
+        else if (t === 'h2') cost += 30;
+        else if (t === 'h3') cost += 25;
+        else if (t === 'p' || t === 'li' || t === 'ul' || t === 'ol') cost += 14;
+        else cost += 8;
+        return acc + cost;
+    }, 0);
+  };
+
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     const tagName = node.tagName.toLowerCase();
@@ -62,9 +124,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
       // If the remaining space is small, or the page is already quite full,
       // push the entire container to the next page to give it maximum width/height budget
       if (currentPageNodes.length > 0 && spaceLeft < activeLimit * 0.4) {
-        pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
-        currentPageNodes = [];
-        currentHeightUnits = 0;
+        flushPage();
         i--; // Re-process same node on the clean page
         continue;
       }
@@ -122,13 +182,13 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
           // so part2 is evaluated on the next iteration (starting a fresh page!)
           nodes[i] = part2;
           i--;
+          
+          flushPage();
           continue;
         } else {
           // If we couldn't separate even minSplit children, push the whole box/list to a fresh page
           if (currentPageNodes.length > 0) {
-            pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
-            currentPageNodes = [];
-            currentHeightUnits = 0;
+            flushPage();
             i--;
             continue;
           }
@@ -140,6 +200,8 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
 
     if (currentPageNodes.length > 0) {
       if (isChapterOpener) {
+        shouldBreakBefore = true;
+      } else if (isH1 && (nodeText.toLowerCase().includes('fontes consultadas') || nodeText.toLowerCase().includes('referências') || nodeText.toLowerCase().includes('referencias'))) {
         shouldBreakBefore = true;
       } else if (currentHeightUnits + nodeCost > activeLimit) {
         shouldBreakBefore = true;
@@ -153,59 +215,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     }
 
     if (shouldBreakBefore) {
-      // Check for orphan headings at the end of the page
-      // A heading needs at least 2 non-heading elements after it on the same page.
-      const orphanNodes: Element[] = [];
-      let popCount = 0;
-      let nonHeadingCount = 0;
-
-      for (let j = currentPageNodes.length - 1; j >= 0; j--) {
-        const lastNode = currentPageNodes[j];
-        const lastTagName = lastNode.tagName.toLowerCase();
-        const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
-        
-        if (isHeading) {
-          if (nonHeadingCount < 2) {
-            popCount = currentPageNodes.length - j;
-          } else {
-            break;
-          }
-        } else {
-          nonHeadingCount++;
-          if (nonHeadingCount >= 2 && popCount === 0) {
-            break;
-          }
-        }
-      }
-
-      if (popCount > 0 && popCount < currentPageNodes.length) {
-        const popped = currentPageNodes.splice(currentPageNodes.length - popCount, popCount);
-        orphanNodes.push(...popped);
-      } else if (popCount === currentPageNodes.length) {
-        // the entire page cannot be orphans. Leave it.
-      }
-
-      if (currentPageNodes.length > 0) {
-          pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
-      }
-      
-      currentPageNodes = [...orphanNodes];
-      // Recalculate height for the orphans we carried over
-      currentHeightUnits = orphanNodes.reduce((acc, n) => {
-          const t = n.tagName.toLowerCase();
-          const isChap = n.classList.contains('chapter-opener');
-          const isBx = n.classList.contains('box-cuidado') || n.classList.contains('box-informativo') || n.classList.contains('box-reflexao');
-          const textWords = (n.textContent || '').trim().split(/\s+/).filter(x => x.length > 0).length;
-          let cost = textWords;
-          if (isBx) cost += 60;
-          else if (isChap) cost = 9999;
-          else if (t === 'h1' || n.querySelector('h1')) cost += 50;
-          else if (t === 'h2') cost += 30;
-          else if (t === 'h3') cost += 25;
-          else if (t === 'p' || t === 'li' || t === 'ul' || t === 'ol') cost += 14;
-          else cost += 8;
-          return acc + cost;
-      }, 0);
+      flushPage();
     }
     
     currentPageNodes.push(node);

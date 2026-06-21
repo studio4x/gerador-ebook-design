@@ -22,6 +22,7 @@ export function CloudSync({
   const [isSyncing, setIsSyncing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [cloudProjects, setCloudProjects] = useState<any[]>([]);
+  const [syncStatus, setSyncStatus] = useState<"Salvando..." | "Salvo" | "">("");
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -67,14 +68,15 @@ export function CloudSync({
     }
   };
 
-  const saveToCloud = async () => {
+  const saveToCloud = async (silent = false) => {
     if (!user) return;
     if (blocks.length === 0) {
-      showToast("Adicione conteúdo antes de salvar na nuvem.", "error");
+      if (!silent) showToast("Adicione conteúdo antes de salvar na nuvem.", "error");
       return;
     }
     
     setIsSyncing(true);
+    if (silent) setSyncStatus("Salvando...");
     
     // Create a safe default ID for the user's project
     const safeTitle = (settings.title || 'untitled').toLowerCase().replace(/[^a-z0-9]/g, '-');
@@ -88,8 +90,6 @@ export function CloudSync({
         const docSnap = await getDoc(docRef);
         exists = docSnap.exists();
       } catch (e: any) {
-        // If getDoc fails due to permission errors (which happens if the doc doesn't exist
-        // or belongs to someone else), we assume it doesn't exist yet and we try to create it.
         exists = false;
       }
 
@@ -111,18 +111,35 @@ export function CloudSync({
           updatedAt: serverTimestamp()
         });
       }
-      showToast("Projeto salvo na nuvem com sucesso!", "success");
-      loadCloudProjects();
+      
+      if (!silent) {
+        showToast("Projeto salvo na nuvem com sucesso!", "success");
+        loadCloudProjects();
+      } else {
+        setSyncStatus("Salvo");
+        setTimeout(() => setSyncStatus(""), 3000);
+      }
     } catch (err) {
       try {
         handleFirestoreError(err, OperationType.WRITE, `ebooks/${projectId}`);
       } catch (e: any) {
-        showToast("Erro ao salvar: " + e.message, "error");
+        if (!silent) showToast("Erro ao salvar: " + e.message, "error");
       }
     } finally {
       setIsSyncing(false);
     }
   };
+
+  // Auto-save logic
+  useEffect(() => {
+    if (!user || blocks.length === 0) return;
+    
+    const timer = setTimeout(() => {
+      saveToCloud(true);
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, [blocks, settings, user]);
 
   const loadFromCloud = async (projectId: string) => {
     try {
@@ -150,6 +167,11 @@ export function CloudSync({
   return (
     <>
       <div className="flex items-center gap-2">
+        {syncStatus && (
+          <span className={`text-[10px] font-medium mr-2 hidden sm:block ${syncStatus === 'Salvo' ? 'text-green-600' : 'text-gray-400'}`}>
+            {syncStatus === 'Salvo' ? '✓ ' : ''}{syncStatus}
+          </span>
+        )}
         {!user ? (
           <button
             onClick={handleLogin}

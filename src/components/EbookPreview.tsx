@@ -209,9 +209,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   }, [settings.densityMode]);
 
   const listSpacingClass = useMemo(() => {
-    if (settings.densityMode === 'compact') return 'space-y-2';
-    if (settings.densityMode === 'premium') return 'space-y-4';
-    return 'space-y-3'; // comfortable default
+    if (settings.densityMode === 'compact') return 'space-y-1';
+    if (settings.densityMode === 'premium') return 'space-y-3';
+    return 'space-y-2'; // comfortable default
   }, [settings.densityMode]);
 
   // Group and paginate TOC raw entries to prevent page-breaking inside a chapter's list of sub-headings

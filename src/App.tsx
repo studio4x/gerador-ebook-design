@@ -104,6 +104,7 @@ export default function App() {
   const [contentPages, setContentPages] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingEpub, setIsExportingEpub] = useState(false);
   const [reprocessTrigger, setReprocessTrigger] = useState(0);
   const [revisions, setRevisions] = useState<LayoutRevision[]>(() => {
     const saved = localStorage.getItem("ebook_layout_revisions");
@@ -166,7 +167,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.32";
+  const buildVersionStr = "v1.4.37";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -505,6 +506,73 @@ export default function App() {
     }
 
     return resolveOklchToHsla(combinedCss);
+  };
+
+  const exportEpub = async () => {
+    if (blocks.length === 0) {
+      showToast("Nenhum conteúdo para exportar. Por favor, adicione capítulos primeiro.", "error");
+      return;
+    }
+    
+    setIsExportingEpub(true);
+    try {
+      const { generateEpub } = await import('./utils/epubGenerator');
+      
+      const doc = new DOMParser().parseFromString(parsedHtml, "text/html");
+      const chapters: { title: string, htmlBody: string }[] = [];
+      
+      let currentTitle = "Capítulo 1";
+      let currentBody = "";
+      
+      const elements = Array.from(doc.body.children);
+      for (const el of elements) {
+        if (['h1', 'h2', 'h3', 'h4', 'h5'].includes(el.tagName.toLowerCase())) {
+          if (currentBody.trim().length > 0) {
+              chapters.push({ title: currentTitle, htmlBody: currentBody });
+          }
+          currentTitle = el.textContent || `Capítulo ${chapters.length + 1}`;
+          currentBody = el.outerHTML;
+        } else {
+          currentBody += el.outerHTML;
+        }
+      }
+      
+      if (currentBody.trim().length > 0) {
+        chapters.push({ title: currentTitle, htmlBody: currentBody });
+      }
+
+      let coverHtml = "";
+      if (settings.title) {
+        coverHtml = `<div style="text-align: center; margin-top: 20%;">
+           <h1 style="font-size: 3em;">${settings.title}</h1>
+           <h2>${settings.subtitle || ''}</h2>
+           <h3>${settings.brand || settings.professionalName || ''}</h3>
+        </div>`;
+      }
+
+      const epubBlob = await generateEpub({
+        title: settings.title || "E-book",
+        author: settings.professionalName || settings.brand || "Autor",
+        chapters: chapters,
+        coverHtml: coverHtml
+      });
+      
+      const url = URL.createObjectURL(epubBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${settings.title ? settings.title.replace(/[^a-zA-Z0-9]/gi, '_').toLowerCase() : 'ebook'}.epub`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showToast("EPUB gerado com sucesso!", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast("Erro ao gerar EPUB.", "error");
+    } finally {
+      setIsExportingEpub(false);
+    }
   };
 
   const printPdf = async () => {
@@ -857,6 +925,30 @@ export default function App() {
           
           <div className="h-4 w-[1px] bg-gray-200 mx-1 hidden md:block"></div>
 
+          <button
+            onClick={exportEpub}
+            disabled={blocks.length === 0 || isExportingEpub}
+            className="h-8 px-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            title={
+              blocks.length === 0
+                ? "Adicione conteúdo antes de exportar"
+                : isExportingEpub
+                  ? "Exportando EPUB..."
+                  : "Exportar para EPUB"
+            }
+          >
+            {isExportingEpub ? (
+              <>
+                <RefreshCw size={12} className="animate-spin" />
+                <span>Gerando...</span>
+              </>
+            ) : (
+              <>
+                <BookOpen size={13} className="shrink-0" />
+                <span>Exportar EPUB</span>
+              </>
+            )}
+          </button>
           <button
             onClick={printPdf}
             disabled={blocks.length === 0 || isExportingPdf}
@@ -1270,6 +1362,29 @@ export default function App() {
                 </div>
 
                 <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                  <button
+                    onClick={exportEpub}
+                    disabled={blocks.length === 0 || isExportingEpub}
+                    className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-sm flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      blocks.length === 0
+                        ? "Adicione conteúdo antes de exportar"
+                        : isExportingEpub
+                          ? "Exportando EPUB..."
+                          : "Exportar para EPUB"
+                    }
+                  >
+                    {isExportingEpub ? (
+                      <>
+                        <RefreshCw size={20} className="mr-2 animate-spin" />
+                        Gerando EPUB...
+                      </>
+                    ) : (
+                      <>
+                        <BookOpen size={20} className="mr-2" /> Exportar para EPUB
+                      </>
+                    )}
+                  </button>
                   <button
                     onClick={printPdf}
                     disabled={blocks.length === 0 || isExportingPdf}

@@ -103,8 +103,8 @@ h1, h2, h3, h4, h5 {
   font-family: var(--font-display);
   font-size: var(--ebook-h2-size, 1.5rem);
   color: var(--color-brand-petroleo);
-  margin-top: 1.8rem;
-  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.8);
+  margin-top: 1.2rem;
+  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.5);
   font-weight: 600;
 }
 
@@ -112,8 +112,8 @@ h1, h2, h3, h4, h5 {
   font-family: var(--font-display);
   font-size: calc(var(--ebook-h2-size, 1.5rem) * 0.8);
   color: var(--color-brand-azul);
-  margin-top: 1.4rem;
-  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.6);
+  margin-top: 1rem;
+  margin-bottom: calc(var(--ebook-para-margin, 1rem) * 0.4);
   font-weight: 600;
 }
 
