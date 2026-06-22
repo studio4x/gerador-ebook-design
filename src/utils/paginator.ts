@@ -67,7 +67,13 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
         const isBx = n.classList.contains('box-cuidado') || n.classList.contains('box-informativo') || n.classList.contains('box-reflexao');
         const textWords = (n.textContent || '').trim().split(/\s+/).filter(x => x.length > 0).length;
         let cost = textWords;
-        if (isBx) cost += 60;
+        if (isBx) {
+          const innerParagraphsCount = n.querySelectorAll('p').length;
+          const innerHeadingCount = n.querySelectorAll('h1, h2, h3, h4, h5').length;
+          const innerListItemCount = n.querySelectorAll('li').length;
+          const innerListCount = n.querySelectorAll('ul, ol').length;
+          cost += 80 + (innerParagraphsCount * 18) + (innerHeadingCount * 30) + (innerListItemCount * 14) + (innerListCount * 10);
+        }
         else if (isChap) cost = 9999;
         else if (t === 'h1' || n.querySelector('h1')) cost += 50;
         else if (t === 'h2') cost += 30;
@@ -101,7 +107,11 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     if (isBox) {
       // Boxes have surrounding margins, inner paddings, borders and text
-      nodeCost += 60; // Increased to protect bottom boundary on box content
+      const innerParagraphsCount = node.querySelectorAll('p').length;
+      const innerHeadingCount = node.querySelectorAll('h1, h2, h3, h4, h5').length;
+      const innerListItemCount = node.querySelectorAll('li').length;
+      const innerListCount = node.querySelectorAll('ul, ol').length;
+      nodeCost += 80 + (innerParagraphsCount * 18) + (innerHeadingCount * 30) + (innerListItemCount * 14) + (innerListCount * 10);
     } else if (isChapterOpener) {
       nodeCost = 9999; // Occupies a full page exclusively
     } else if (isH1) {
@@ -141,7 +151,14 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
           const child = children[c];
           const childText = child.textContent || '';
           const childWords = childText.trim().split(/\s+/).filter(x => x.length > 0).length;
-          const childCost = childWords + 12; // cost per paragraph / list-item
+          
+          const childTagName = child.tagName.toLowerCase();
+          const isChildList = childTagName === 'ul' || childTagName === 'ol';
+          let childCost = childWords + 12; // cost per paragraph / list-item
+          if (isChildList) {
+            const liCount = child.querySelectorAll('li').length;
+            childCost += liCount * 14;
+          }
           
           if (accumulatedCost + childCost > parentLimit && c > 0) {
             splitIndex = c;
@@ -198,8 +215,15 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
 
     let shouldBreakBefore = false;
 
+    // Check if it's the requested "Sobre a Dra. Deyse Simon" or similar closing profiles/credits
+    const normText = nodeText.toLowerCase();
+    const isProfileSection = normText.includes('sobre a dra.') || 
+                             normText.includes('sobre a autora') || 
+                             normText.includes('sobre o autor') || 
+                             normText.includes('sobre deyse simon');
+
     if (currentPageNodes.length > 0) {
-      if (isChapterOpener) {
+      if (isChapterOpener || isProfileSection) {
         shouldBreakBefore = true;
       } else if (isH1 && (nodeText.toLowerCase().includes('fontes consultadas') || nodeText.toLowerCase().includes('referências') || nodeText.toLowerCase().includes('referencias'))) {
         shouldBreakBefore = true;

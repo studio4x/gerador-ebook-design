@@ -1119,8 +1119,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                      {settings.website && <p><strong>Site:</strong> {settings.website}</p>}
                                      {settings.instagram && <p><strong>Instagram:</strong> {settings.instagram}</p>}
                                      {settings.email && <p><strong>E-mail:</strong> {settings.email}</p>}
-                                     {settings.whatsapp && <p className="no-print"><strong>WhatsApp:</strong> <a href={settings.whatsapp} className="text-[#245C5A] underline">{settings.whatsapp}</a></p>}
-                                     {settings.whatsapp && <p className="hidden print:block"><strong>WhatsApp:</strong> {settings.whatsapp}</p>}
+                                     {settings.whatsapp && <p className="no-print"><strong>WhatsApp:</strong> <a href={settings.whatsapp} target="_blank" rel="noreferrer" className="text-[#245C5A] underline">{getFormattedWhatsapp(settings.whatsapp)}</a></p>}
+                                     {settings.whatsapp && <p className="hidden print:block"><strong>WhatsApp:</strong> {getFormattedWhatsapp(settings.whatsapp)}</p>}
                                      {settings.contactAddress && <p className="mt-4 max-w-md"><strong className="block">Endereço:</strong> {settings.contactAddress}</p>}
                                  </div>
                              </div>
@@ -1138,4 +1138,42 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       </div>
     </div>
   );
+}
+
+function getFormattedWhatsapp(urlOrNum: string): string {
+  if (!urlOrNum) return "";
+  let digits = "";
+  if (urlOrNum.includes("wa.me/")) {
+    const match = urlOrNum.match(/wa\.me\/([0-9\+]+)/);
+    if (match) digits = match[1].replace(/\+/g, "");
+  } else if (urlOrNum.includes("phone=")) {
+    const match = urlOrNum.match(/phone=([0-9\+]+)/);
+    if (match) digits = match[1].replace(/\+/g, "");
+  } else {
+    digits = urlOrNum.replace(/\D/g, "");
+  }
+
+  if (!digits) {
+    return urlOrNum;
+  }
+
+  // If starts with 55 (Brazil), format accordingly
+  if (digits.startsWith("55") && digits.length >= 12) {
+    const ddd = digits.substring(2, 4);
+    const firstPart = digits.substring(4, digits.length - 4);
+    const secondPart = digits.substring(digits.length - 4);
+    return `(${ddd}) ${firstPart}-${secondPart}`;
+  } else if (digits.length === 11) {
+    const ddd = digits.substring(0, 2);
+    const firstPart = digits.substring(2, 7);
+    const secondPart = digits.substring(7);
+    return `(${ddd}) ${firstPart}-${secondPart}`;
+  } else if (digits.length === 10) {
+    const ddd = digits.substring(0, 2);
+    const firstPart = digits.substring(2, 6);
+    const secondPart = digits.substring(6);
+    return `(${ddd}) ${firstPart}-${secondPart}`;
+  }
+
+  return digits;
 }
