@@ -203,15 +203,27 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   // Adjust table of contents entries spacing by Density setting
   const entriesPerPage = useMemo(() => {
-    if (settings.densityMode === 'compact') return 18;
-    if (settings.densityMode === 'premium') return 10;
-    return 14; // default (comfortable)
+    if (settings.densityMode === 'compact') return 26;
+    if (settings.densityMode === 'premium') return 14;
+    return 20; // default (comfortable)
   }, [settings.densityMode]);
 
   const listSpacingClass = useMemo(() => {
-    if (settings.densityMode === 'compact') return 'space-y-1';
-    if (settings.densityMode === 'premium') return 'space-y-3';
-    return 'space-y-2'; // comfortable default
+    if (settings.densityMode === 'compact') return 'space-y-0.5';
+    if (settings.densityMode === 'premium') return 'space-y-2';
+    return 'space-y-1'; // comfortable default
+  }, [settings.densityMode]);
+
+  const linkPaddingClass = useMemo(() => {
+    if (settings.densityMode === 'compact') return 'py-0.5';
+    if (settings.densityMode === 'premium') return 'py-1.5';
+    return 'py-1'; // comfortable default
+  }, [settings.densityMode]);
+
+  const linkLeadingClass = useMemo(() => {
+    if (settings.densityMode === 'compact') return 'leading-tight';
+    if (settings.densityMode === 'premium') return 'leading-relaxed';
+    return 'leading-snug'; // comfortable default
   }, [settings.densityMode]);
 
   // Group and paginate TOC raw entries to prevent page-breaking inside a chapter's list of sub-headings
@@ -1023,9 +1035,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                              }
                                            }, 100);
                                          }}
-                                         className="group flex flex-row items-end justify-between hover:text-[#C9826B] transition-colors duration-150 py-1.5"
+                                         className={`group flex flex-row items-end justify-between hover:text-[#C9826B] transition-colors duration-150 ${linkPaddingClass}`}
                                        >
-                                         <span className={`text-left pr-2 pb-0.5 transition-colors duration-150 leading-relaxed ${
+                                         <span className={`text-left pr-2 pb-0.5 transition-colors duration-150 ${linkLeadingClass} ${
                                            entry.level === 1 
                                             ? 'font-display font-bold text-[#245C5A] text-sm md:text-base group-hover:text-[#C9826B]' 
                                             : entry.level === 2
