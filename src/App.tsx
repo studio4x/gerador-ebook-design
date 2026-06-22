@@ -270,7 +270,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.51";
+  const buildVersionStr = "v1.4.52";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -480,17 +480,33 @@ export default function App() {
     showToast("Revisão excluída com sucesso!", "success");
   };
 
-  const reprocessPreview = async () => {
+  const reprocessPreview = async (overrideSettings?: ProjectSettings | React.MouseEvent | any) => {
+    // If it's a DOM event (e.click), ignore it
+    const isMouseEvent = overrideSettings && (overrideSettings.nativeEvent || overrideSettings.target);
+    const newSettings = (overrideSettings && !isMouseEvent) ? overrideSettings as ProjectSettings : undefined;
+
     setIsGenerating(true);
     try {
       // 1. Extract metadata from content
       const contentMetadata = extractMetadataFromContent(blocks);
 
-      // 2. Keep visual settings (from current settings) but ensure content variables are matched
-      const merged = {
-        ...settings,
-        ...contentMetadata,
-      };
+      let merged: ProjectSettings;
+
+      if (newSettings) {
+        // User clicked "Salvar" in Visual Settings Panel!
+        // The newSettings represent the absolute truth of what the settings should be right now.
+        // We DO NOT want the old markdown content to overwrite these new edits immediately.
+        merged = {
+            ...contentMetadata,
+            ...newSettings, // Explicit user UI overrides win!
+        } as ProjectSettings;
+      } else {
+        // Normal reprocessing (e.g., text changed, or initial load)
+        merged = {
+            ...settings, // Current settings
+            ...contentMetadata, // New markdown metadata wins!
+        } as ProjectSettings;
+      }
 
       setSettings(merged);
 

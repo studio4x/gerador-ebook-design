@@ -4,7 +4,7 @@ import { ProjectSettings } from '../types';
 interface VisualSettingsPanelProps {
   settings: ProjectSettings;
   setSettings: React.Dispatch<React.SetStateAction<ProjectSettings>>;
-  onApply: () => void;
+  onApply: (newSettings?: ProjectSettings) => void;
   onRestoreDefault: () => void;
 }
 
@@ -159,7 +159,7 @@ export function VisualSettingsPanel({ settings, setSettings, onApply, onRestoreD
         <button 
           onClick={() => {
             setSettings(localSettings);
-            onApply();
+            onApply(localSettings);
           }}
           className="bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors flex-1 min-w-[200px]"
         >
