@@ -13,7 +13,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     .join('\n\n---\n\n');
 
   // Handle manual page breaks
-  mergedMarkdown = mergedMarkdown.replace(/<!--\s*page-break\s*-->/gi, '<div class="manual-page-break" data-page-break="true"></div>');
+  mergedMarkdown = mergedMarkdown.replace(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)/gi, '<div class="manual-page-break" data-page-break="true"></div>');
 
   // Remove generic identifiers like "# Parte 1", "Parte 1", "# Bloco 1", etc alone on a line
   mergedMarkdown = mergedMarkdown.replace(/^[#\s]*(Parte|Bloco|Arquivo|Conteúdo|Cap[íi]tulo\s+Extra)\s*\d+.*$/gim, '');

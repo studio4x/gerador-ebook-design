@@ -40,6 +40,12 @@ export type ProjectSettings = {
   descriptiveHeader?: boolean;
 };
 
+export type BlockRevision = {
+  id: string;
+  timestamp: string;
+  content: string;
+};
+
 export type ContentBlock = {
   id: string;
   filename: string;
@@ -47,6 +53,7 @@ export type ContentBlock = {
   originalContent?: string;
   isEdited?: boolean;
   updatedAt?: string;
+  revisions?: BlockRevision[];
 };
 
 export type EbookProject = {

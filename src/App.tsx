@@ -8,6 +8,7 @@ import {
 import { parseEbookContent, extractMetadataFromContent } from "./utils/parser";
 import { chunkIntoPages } from "./utils/paginator";
 import { EbookPreview } from "./components/EbookPreview";
+import { VisualSettingsPanel } from "./components/VisualSettingsPanel";
 import { parseHandoffMarkdown, LayoutRevision } from "./utils/handoffParser";
 import {
   FileText,
@@ -29,7 +30,8 @@ import {
   LogIn,
   Edit3,
   FileEdit,
-  Scissors
+  Scissors,
+  Save
 } from "lucide-react";
 
 // Import CloudSync & Firebase Auth
@@ -89,6 +91,7 @@ export default function App() {
   };
 
   const [activeTab, setActiveTab] = useState<"content" | "visual" | "edit" | "preview">("content");
+  const textareasRef = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const [settings, setSettings] = useState<ProjectSettings>(() => {
     const saved = localStorage.getItem("ebook_layout_settings");
     if (saved) {
@@ -267,7 +270,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.44";
+  const buildVersionStr = "v1.4.51";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -360,6 +363,27 @@ export default function App() {
 
   const removeBlock = (id: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const saveRevision = (id: string) => {
+    setBlocks((prev) => prev.map((b) => {
+      if (b.id !== id) return b;
+      const revisions = b.revisions || [];
+      const isDuplicate = revisions.length > 0 && revisions[revisions.length - 1].content === b.content;
+      if (!isDuplicate) {
+         return {
+           ...b,
+           revisions: [...revisions, { id: crypto.randomUUID(), timestamp: new Date().toLocaleString("pt-BR"), content: b.content }]
+         };
+      }
+      return b;
+    }));
+    showToast("Ajuste salvo como uma nova revisão.", "success");
+  };
+
+  const revertRevision = (blockId: string, revisionContent: string) => {
+     setBlocks((prev) => prev.map((b) => b.id === blockId ? { ...b, content: revisionContent, isEdited: true, updatedAt: new Date().toLocaleString("pt-BR") } : b));
+     showToast("Revisão restaurada.", "success");
   };
 
   const saveProject = () => {
@@ -515,6 +539,13 @@ export default function App() {
       "success",
     );
     setShowClearConfirm(false);
+  };
+
+  const handleRestoreDefaultVisuals = () => {
+    if (confirm("Deseja realmente restaurar as definições visuais para os padrões? Não afetará seu conteúdo.")) {
+      setSettings(DEFAULT_SETTINGS);
+      showToast("Definições visuais restauradas.", "success");
+    }
   };
 
   const resolveOklchToHsla = (cssText: string): string => {
@@ -1236,106 +1267,40 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-7xl mx-auto">
               {/* LEFT COLUMN: VISUAL PARAMETERS LISTING & SPECIFICATION LOADER (7 columns) */}
               <div className="lg:col-span-7 space-y-6">
-                {/* SPECIFICATION SYNC CARD */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
                   <div className="flex items-center gap-2 text-[#245C5A] mb-3">
                     <Palette size={20} />
                     <h3 className="text-lg font-display font-semibold">
-                      Configuração Visual (.md)
+                      Definições Visuais
                     </h3>
                   </div>
 
                   <p className="text-xs text-gray-500 mb-5 leading-relaxed font-sans">
-                    Importe um arquivo de especificações/handoff (como{" "}
-                    <code className="bg-gray-100 px-1 py-0.5 rounded font-mono">EBOOK_VISUAL_HANDOFF.md</code>) para preencher os
-                    metadados, marca, autoria e avisos automáticos do e-book de forma global e instantânea.
+                    Edite as configurações de design manualmente ou importe um arquivo de handoff (como{" "}
+                    <code className="bg-gray-100 px-1 py-0.5 rounded font-mono">EBOOK_VISUAL_HANDOFF.md</code>) para preencher rapidamente.
                   </p>
 
-                  <div className="mb-6">
-                    <label
-                      id="upload-visual-btn-tab"
-                      className="cursor-pointer bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-4 py-3 rounded-lg font-semibold transition-all shadow-xs inline-flex items-center justify-center w-full text-xs h-10"
-                    >
-                      <Upload size={14} className="mr-1.5" /> Carregar Especificações Visual .md
-                      <input
-                        type="file"
-                        accept=".md,.txt"
-                        className="hidden"
-                        ref={handoffFileInputRef}
-                        onChange={handleHandoffUpload}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="border-t border-gray-100 pt-5 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      Parâmetros Visuais de Estilo Carregados:
-                    </h4>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Título Principal</span>
-                        <span className="font-semibold text-gray-800 break-words" title={settings.title}>
-                          {settings.title || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Subtítulo</span>
-                        <span className="font-semibold text-gray-800 break-words" title={settings.subtitle}>
-                          {settings.subtitle || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Marca / Identidade</span>
-                        <span className="font-semibold text-gray-800 break-words">
-                          {settings.brand || "Não importada"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Autor(a)</span>
-                        <span className="font-semibold text-gray-800 break-words">
-                          {settings.professionalName || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Título Profissional</span>
-                        <span className="font-semibold text-gray-500 break-words">
-                          {settings.professionalTitle || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Conselho / Registro</span>
-                        <span className="font-semibold text-[#8A4D3B] break-words">
-                          {settings.professionalReg || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Site Oficial</span>
-                        <span className="font-semibold text-[#245C5A] break-words">
-                          {settings.website || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Tipo de Material</span>
-                        <span className="font-semibold text-gray-800 break-words">
-                          {settings.materialType || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs">
-                        <span className="text-gray-400 block mb-1">Público-Alvo</span>
-                        <span className="font-semibold text-gray-800 break-words">
-                          {settings.targetAudience || "Não importado"}
-                        </span>
-                      </div>
-                      <div className="bg-[#FAF8F4] p-3 rounded-lg border border-gray-100/70 text-xs md:col-span-2">
-                        <span className="text-gray-400 block mb-1">Texto do Cabeçalho</span>
-                        <span className="font-semibold text-gray-800 break-words">
-                          {settings.headerText || "Texto padrão"} {settings.descriptiveHeader ? "(Com nome do capítulo)" : ""}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  <label
+                    id="upload-visual-btn-tab"
+                    className="cursor-pointer bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-4 py-3 rounded-lg font-semibold transition-all shadow-xs inline-flex items-center justify-center w-full text-xs h-10"
+                  >
+                    <Upload size={14} className="mr-1.5" /> Carregar Especificações Visual .md
+                    <input
+                      type="file"
+                      accept=".md,.txt"
+                      className="hidden"
+                      ref={handoffFileInputRef}
+                      onChange={handleHandoffUpload}
+                    />
+                  </label>
                 </div>
+                
+                <VisualSettingsPanel 
+                  settings={settings} 
+                  setSettings={setSettings} 
+                  onApply={reprocessPreview} 
+                  onRestoreDefault={handleRestoreDefaultVisuals} 
+                />
               </div>
 
               {/* RIGHT COLUMN: REVISION HISTORY (5 columns) */}
@@ -1462,11 +1427,22 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {blocks.map((block) => {
-                    const blockBreakCount = (block.content.match(/<!--\s*page-break\s*-->/gi) || []).length;
+                <div className="space-y-8">
+                  {blocks.map((block, index) => {
+                    const blockBreakCount = (block.content.match(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)/gi) || []).length;
                     return (
-                      <div key={block.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col transition-all">
+                      <React.Fragment key={block.id}>
+                        {index > 0 && (
+                          <div className="flex items-center gap-4 text-gray-400 my-4 select-none">
+                            <hr className="flex-1 border-dashed border-gray-300" />
+                            <div className="text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5 text-gray-400 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
+                              <Scissors size={12} />
+                              Quebra de Página Automática (Entre Blocos)
+                            </div>
+                            <hr className="flex-1 border-dashed border-gray-300" />
+                          </div>
+                        )}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col transition-all">
                         <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
                           <div className="flex flex-col">
                             <h3 className="font-semibold text-[#2F3437] text-sm flex items-center gap-2">
@@ -1481,18 +1457,48 @@ export default function App() {
                           </div>
                           <div className="flex items-center gap-2">
                              <button
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => saveRevision(block.id)}
+                              className="text-xs bg-white border border-[#245C5A] text-[#245C5A] hover:bg-[#245C5A] hover:text-white px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-medium"
+                              title="Salvar ajustes deste bloco (cria uma revisão)"
+                            >
+                              <Save size={12} /> Salvar
+                            </button>
+                             <button
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
-                                const newContent = block.content + "\n\n<!-- page-break -->\n\n";
-                                updateBlockContent(block.id, newContent);
+                                const ta = textareasRef.current[block.id];
+                                if (ta) {
+                                  let start = ta.selectionStart;
+                                  let end = ta.selectionEnd;
+                                  
+                                  // Se o textarea não estiver focado e o cursor estiver no ínicio, insere no final
+                                  if (document.activeElement !== ta && start === 0 && end === 0) {
+                                    start = block.content.length;
+                                    end = block.content.length;
+                                  }
+
+                                  const newContent = block.content.substring(0, start) + "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n" + block.content.substring(end);
+                                  updateBlockContent(block.id, newContent);
+                                  
+                                  setTimeout(() => {
+                                    ta.focus();
+                                    ta.setSelectionRange(start + 36, start + 36);
+                                  }, 0);
+                                } else {
+                                  const newContent = block.content + "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n";
+                                  updateBlockContent(block.id, newContent);
+                                }
                               }}
                               className="text-xs bg-white border border-[#245C5A] text-[#245C5A] hover:bg-gray-50 px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-medium"
-                              title="Inserir quebra de página manual ao final do bloco"
+                              title="Inserir quebra de página manual na posição do cursor"
                             >
                               <Scissors size={12} /> Add Quebra
                             </button>
                             <button
+                               onMouseDown={(e) => e.preventDefault()}
                                onClick={() => {
-                                 const cleanContent = block.content.replace(/<!--\s*page-break\s*-->\n?/gi, "");
+                                 const cleanContent = block.content.replace(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)\n?/gi, "");
                                  updateBlockContent(block.id, cleanContent);
                                  showToast("Quebras manuais removidas deste bloco.", "success");
                                }}
@@ -1509,8 +1515,25 @@ export default function App() {
                              Este bloco contém {blockBreakCount} quebra{blockBreakCount > 1 ? "s" : ""} de página manual.
                           </div>
                         )}
+                        {(block.revisions && block.revisions.length > 0) && (
+                          <div className="bg-gray-50 px-4 py-2 text-xs border-b border-gray-200 flex items-center gap-2 overflow-x-auto">
+                            <History size={12} className="text-gray-500" />
+                            <span className="text-gray-600 font-medium mr-2">Revisões:</span>
+                            {block.revisions.map((rev, idx) => (
+                              <button
+                                key={rev.id}
+                                onClick={() => revertRevision(block.id, rev.content)}
+                                className="text-[10px] bg-white border border-gray-300 text-gray-600 px-2 py-1 rounded hover:bg-gray-100 whitespace-nowrap"
+                                title="Clique para restaurar esta versão"
+                              >
+                                Rev {idx + 1} ({rev.timestamp})
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <div className="p-0 flex-1 relative">
                           <textarea
+                            ref={(el) => { textareasRef.current[block.id] = el; }}
                             className="w-full h-64 p-4 text-sm font-mono text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#245C5A] resize-y border-none"
                             value={block.content}
                             onChange={(e) => {
@@ -1521,6 +1544,7 @@ export default function App() {
                           />
                         </div>
                       </div>
+                      </React.Fragment>
                     );
                   })}
                 </div>
