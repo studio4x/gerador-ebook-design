@@ -25,10 +25,14 @@ import {
   User,
   BookOpen,
   AlertCircle,
+  Mail,
+  LogIn,
 } from "lucide-react";
 
-// Import CloudSync
+// Import CloudSync & Firebase Auth
 import { CloudSync } from "./components/CloudSync";
+import { auth } from "./lib/firebase";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User as FirebaseUser } from "firebase/auth";
 
 export default function App() {
   const initialSettings: ProjectSettings = {
@@ -106,6 +110,99 @@ export default function App() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingEpub, setIsExportingEpub] = useState(false);
   const [reprocessTrigger, setReprocessTrigger] = useState(0);
+
+  // Authentication and automated emailing states
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [shouldEmailPdf, setShouldEmailPdf] = useState(true);
+  const [shouldEmailEpub, setShouldEmailEpub] = useState(true);
+  const [isSendingPdfEmail, setIsSendingPdfEmail] = useState(false);
+  const [isSendingEpubEmail, setIsSendingEpubEmail] = useState(false);
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+
+  // Sync auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsub();
+  }, []);
+
+  // SMTP testing helper
+  const testSmtpConnection = async () => {
+    setIsTestingSmtp(true);
+    showToast("Testando conexão SMTP com o servidor...", "info");
+    try {
+      const response = await fetch("/api/test-smtp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        showToast("Sucesso! As credenciais SMTP estão corretas e o servidor de e-mail está pronto.", "success");
+      } else {
+        throw new Error(data.error || "Erro desconhecido ao testar SMTP.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Erro na configuração SMTP: ${err.message || err}`, "error");
+    } finally {
+      setIsTestingSmtp(false);
+    }
+  };
+
+  // Send email helper
+  const sendEmailAttachment = async ({
+    to,
+    fileName,
+    fileBlob,
+    contentType,
+    subject,
+    body
+  }: {
+    to: string;
+    fileName: string;
+    fileBlob: Blob;
+    contentType: string;
+    subject?: string;
+    body?: string;
+  }) => {
+    return new Promise<void>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const rawResult = reader.result as string;
+          const base64data = rawResult.split(',')[1];
+          const response = await fetch("/api/send-email", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              to,
+              subject,
+              body,
+              fileName,
+              fileBase64: base64data,
+              contentType
+            })
+          });
+
+          const data = await response.json();
+          if (response.ok && data.success) {
+            resolve();
+          } else {
+            reject(new Error(data.error || "Erro ao responder do servidor"));
+          }
+        } catch (err: any) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error("Erro ao preparar arquivo base64"));
+      reader.readAsDataURL(fileBlob);
+    });
+  };
   const [revisions, setRevisions] = useState<LayoutRevision[]>(() => {
     const saved = localStorage.getItem("ebook_layout_revisions");
     if (saved) {
@@ -167,7 +264,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.41";
+  const buildVersionStr = "v1.4.43";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -569,7 +666,29 @@ export default function App() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      showToast("EPUB gerado com sucesso!", "success");
+      showToast("EPUB gerado com sucesso para download!", "success");
+
+      // Auto-email copy to logged-in user if selected
+      if (user && user.email && shouldEmailEpub) {
+        setIsSendingEpubEmail(true);
+        showToast("Enviando ePUB para seu e-mail...", "info");
+        try {
+          await sendEmailAttachment({
+            to: user.email,
+            fileName: `${settings.title ? settings.title.replace(/[^a-zA-Z0-9]/gi, '_').toLowerCase() : 'ebook'}.epub`,
+            fileBlob: epubBlob,
+            contentType: "application/epub+zip",
+            subject: `Seu E-book em EPUB: ${settings.title || 'Ebook'}`,
+            body: `Olá!\n\nSeu E-book "${settings.title || 'E-book'}" foi gerado com sucesso pelo aplicativo Gerador de E-books e segue em anexo como arquivo EPUB.\n\nAtenciosamente,\nEquipe de Suporte`
+          });
+          showToast("EPUB enviado com sucesso para seu e-mail!", "success");
+        } catch (mailErr: any) {
+          console.error("Erro ao enviar e-mail com EPUB:", mailErr);
+          showToast(`EPUB baixado com sucesso, mas o envio por e-mail falhou: ${mailErr.message || mailErr}`, "error");
+        } finally {
+          setIsSendingEpubEmail(false);
+        }
+      }
     } catch (err: any) {
       console.error(err);
       showToast("Erro ao gerar EPUB.", "error");
@@ -850,8 +969,32 @@ export default function App() {
       // Update version count for next time
       localStorage.setItem(storageKey, String(version + 1));
 
-      doc.save(`${baseFilename}_v${version}.pdf`);
-      showToast("E-book exportado para PDF com de absoluto sucesso!", "success");
+      const pdfFileName = `${baseFilename}_v${version}.pdf`;
+      doc.save(pdfFileName);
+      showToast("PDF gerado com sucesso para download!", "success");
+
+      // Auto-email copy to logged-in user if selected
+      if (user && user.email && shouldEmailPdf) {
+        setIsSendingPdfEmail(true);
+        showToast("Enviando PDF para seu e-mail...", "info");
+        try {
+          const pdfBlob = doc.output("blob");
+          await sendEmailAttachment({
+            to: user.email,
+            fileName: pdfFileName,
+            fileBlob: pdfBlob,
+            contentType: "application/pdf",
+            subject: `Seu E-book em PDF: ${rawTitle}`,
+            body: `Olá!\n\nSeu E-book "${rawTitle}" foi gerado com sucesso pelo aplicativo Gerador de E-books e segue em anexo como arquivo PDF de alta fidelidade.\n\nAtenciosamente,\nEquipe de Suporte`
+          });
+          showToast("PDF enviado com sucesso para seu e-mail!", "success");
+        } catch (mailErr: any) {
+          console.error("Erro ao enviar e-mail with PDF:", mailErr);
+          showToast(`PDF baixado com sucesso, mas o envio por e-mail falhou: ${mailErr.message || mailErr}`, "error");
+        } finally {
+          setIsSendingPdfEmail(false);
+        }
+      }
     } catch (err: any) {
       console.error(err);
       showToast(`Ocorreu um erro ao exportar: ${err.message || err}`, "error");
@@ -1364,6 +1507,71 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Email Delivery Options */}
+                <div className="mt-6 bg-[#FAF8F4]/80 border border-gray-200 rounded-xl p-5 shadow-xs">
+                  <div className="flex items-center justify-between gap-4 mb-3 border-b border-gray-100 pb-2 flex-wrap">
+                    <h4 className="text-sm font-display font-semibold text-[#245C5A] flex items-center gap-2">
+                      <Mail size={16} /> Opções de Envio Automático por E-mail
+                    </h4>
+                    <button
+                      onClick={testSmtpConnection}
+                      disabled={isTestingSmtp}
+                      className="text-[11px] font-mono font-bold text-[#245C5A] hover:bg-[#245C5A]/5 border border-[#245C5A]/30 px-2.5 py-1 rounded bg-white transition-all disabled:opacity-50 cursor-pointer select-none"
+                      title="Testa a conexão e credenciais do seu servidor SMTP configurado nas variáveis de ambiente"
+                    >
+                      {isTestingSmtp ? "Testando conexão..." : "Testar Conexão SMTP"}
+                    </button>
+                  </div>
+                  {user ? (
+                    <div className="space-y-3 animate-in fade-in duration-200">
+                      <p className="text-xs text-gray-700 leading-relaxed">
+                        Detectamos que você está logado como <strong className="text-[#245C5A]">{user.email}</strong>. 
+                        Durante a geração, além do download automático, enviaremos os anexos diretamente para sua caixa de entrada.
+                      </p>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
+                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-800 hover:text-[#245C5A] select-none">
+                          <input
+                            type="checkbox"
+                            checked={shouldEmailPdf}
+                            onChange={(e) => setShouldEmailPdf(e.target.checked)}
+                            className="rounded border-gray-400 text-[#245C5A] focus:ring-[#245C5A] h-4 w-4 bg-white"
+                          />
+                          <span>Enviar cópia em PDF</span>
+                        </label>
+                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-800 hover:text-blue-700 select-none">
+                          <input
+                            type="checkbox"
+                            checked={shouldEmailEpub}
+                            onChange={(e) => setShouldEmailEpub(e.target.checked)}
+                            className="rounded border-gray-400 text-blue-600 focus:ring-blue-500 h-4 w-4 bg-white"
+                          />
+                          <span>Enviar cópia em EPUB</span>
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs text-gray-600 leading-relaxed">
+                      <div className="flex-1">
+                        Deseja receber os arquivos de alta resolução (PDF e EPUB) diretamente no seu e-mail? <strong>Faça login</strong> usando sua conta Google para ativar o envio automático.
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const provider = new GoogleAuthProvider();
+                            await signInWithPopup(auth, provider);
+                            showToast("Logado com sucesso!", "success");
+                          } catch (err: any) {
+                            showToast("Erro ao fazer login: " + err.message, "error");
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 hover:border-[#245C5A] rounded-lg transition-all cursor-pointer shadow-2xs shrink-0 select-none"
+                      >
+                        <LogIn size={13} className="text-[#245C5A]" /> Entrar e Ativar E-mail
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="mt-6 flex flex-col sm:flex-row gap-4">
                   <button
                     onClick={exportEpub}
@@ -1380,7 +1588,7 @@ export default function App() {
                     {isExportingEpub ? (
                       <>
                         <RefreshCw size={20} className="mr-2 animate-spin" />
-                        Gerando EPUB...
+                        {isSendingEpubEmail ? "Enviando ePUB..." : "Gerando EPUB..."}
                       </>
                     ) : (
                       <>
@@ -1397,18 +1605,17 @@ export default function App() {
                         ? "Adicione conteúdo antes de exportar"
                         : isExportingPdf
                           ? "Exportando PDF..."
-                          : "Exportar para PDF (A4)"
+                          : "Exportar para PDF"
                     }
                   >
                     {isExportingPdf ? (
                       <>
                         <RefreshCw size={20} className="mr-2 animate-spin" />
-                        Gerando PDF direto (A4)...
+                        {isSendingPdfEmail ? "Enviando PDF..." : "Gerando PDF..."}
                       </>
                     ) : (
                       <>
-                        <Download size={20} className="mr-2" /> Exportar para
-                        PDF (A4)
+                        <Download size={20} className="mr-2" /> Exportar para PDF
                       </>
                     )}
                   </button>

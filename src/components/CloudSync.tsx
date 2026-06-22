@@ -216,7 +216,7 @@ export function CloudSync({
                   Logado como <strong>{user?.email}</strong>
                 </p>
                 <button
-                  onClick={saveToCloud}
+                  onClick={() => saveToCloud(false)}
                   disabled={isSyncing}
                   className="flex items-center gap-2 px-6 py-2.5 bg-[#245C5A] text-white rounded-lg font-bold hover:bg-[#1b4342] shadow-sm disabled:opacity-50 transition-colors"
                 >
