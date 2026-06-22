@@ -44,6 +44,9 @@ export type ContentBlock = {
   id: string;
   filename: string;
   content: string;
+  originalContent?: string;
+  isEdited?: boolean;
+  updatedAt?: string;
 };
 
 export type EbookProject = {

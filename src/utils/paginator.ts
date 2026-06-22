@@ -90,6 +90,12 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     // Check if it's a chapter opener
     const isChapterOpener = node.classList.contains('chapter-opener');
+    const isManualPageBreak = node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true';
+    
+    if (isManualPageBreak) {
+      if (currentPageNodes.length > 0) flushPage();
+      continue; // Skip rendering the manual break marker itself
+    }
     const isH1 = tagName === 'h1' || node.querySelector('h1') !== null;
     const isH2 = tagName === 'h2';
     const isH3 = tagName === 'h3';
