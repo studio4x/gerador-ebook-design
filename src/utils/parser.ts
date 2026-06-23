@@ -7,10 +7,15 @@ import { ContentBlock, ProjectSettings } from '../types';
  * and filtered out of standard text pages so they don't repeat.
  */
 export async function parseEbookContent(blocks: ContentBlock[]): Promise<string> {
-  // 1. Merge and Clean
-  let mergedMarkdown = blocks
-    .map((b) => b.content)
-    .join('\n\n---\n\n');
+  // 1. Clean individual blocks of frontmatter before joining to prevent content loss with '---'
+  const cleanedContents = blocks.map((b) => {
+    let content = b.content;
+    // Strip yaml frontmatter strictly at the beginning of the block
+    content = content.replace(/^---\r?\n[\s\S]*?\r?\n---/g, '');
+    return content;
+  });
+
+  let mergedMarkdown = cleanedContents.join('\n\n<!-- block-separator -->\n\n');
 
   // Handle manual page breaks
   mergedMarkdown = mergedMarkdown.replace(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)/gi, '<div class="manual-page-break" data-page-break="true"></div>');
@@ -18,14 +23,14 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
   // Remove generic identifiers like "# Parte 1", "Parte 1", "# Bloco 1", etc alone on a line
   mergedMarkdown = mergedMarkdown.replace(/^[#\s]*(Parte|Bloco|Arquivo|Conteúdo|Cap[íi]tulo\s+Extra)\s*\d+.*$/gim, '');
 
-  // Remove yaml frontmatter block anywhere
-  mergedMarkdown = mergedMarkdown.replace(/(?:^|\n)---\r?\n([\s\S]*?)\r?\n---/g, '');
-  
   // Remove raw frontmatter text sometimes provided by AI without --- markers
   mergedMarkdown = mergedMarkdown.replace(/^(title|titulo):\s*["'].*?["']\s*\r?\n?(subtitle|subtitulo|author|autora):.*/gim, '');
 
   // 2. Parse Markdown to HTML
   let html = await marked.parse(mergedMarkdown, { async: true });
+
+  // Ensure any manual page-break comments or markers that survived the parse stage are converted
+  html = html.replace(/(?:<!--\s*page-break\s*-->|\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\])/gi, '<div class="manual-page-break" data-page-break="true"></div>');
 
   // 3. Post-Process HTML for specific boxes and filters
   const parser = new DOMParser();
@@ -35,6 +40,11 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
   const headings = doc.querySelectorAll('h1, h2, h3, h4');
   
   headings.forEach((heading) => {
+    // Guard against wrapping elements that are already within a chapter-opener or highlighted box
+    if (heading.closest('.chapter-opener, .box-cuidado, .box-informativo, .box-reflexao')) {
+        return;
+    }
+
     const text = heading.textContent?.toLowerCase() || '';
     const originalText = heading.textContent || '';
 
@@ -151,6 +161,23 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
 
       div.innerHTML = bq.innerHTML;
       bq.parentNode?.replaceChild(div, bq);
+  });
+
+  // Ensure manual page breaks are top-level children of doc.body so the paginator detects them and layout is safe
+  const manualBreaks = Array.from(doc.querySelectorAll('.manual-page-break'));
+  manualBreaks.forEach((br) => {
+    let parent = br.parentNode;
+    if (parent && parent !== doc.body) {
+      // Find the direct sibling parent of doc.body
+      let ancestor: Node = br;
+      while (ancestor.parentNode && ancestor.parentNode !== doc.body) {
+        ancestor = ancestor.parentNode;
+      }
+      if (ancestor && ancestor.parentNode === doc.body) {
+        // Insert it right after the block element ancestor in doc.body
+        doc.body.insertBefore(br, ancestor.nextSibling);
+      }
+    }
   });
 
   return doc.body.innerHTML;

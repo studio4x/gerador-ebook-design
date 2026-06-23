@@ -93,14 +93,20 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     const isManualPageBreak = node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true';
     
     if (isManualPageBreak) {
-      if (currentPageNodes.length > 0) flushPage();
+      // Check if we have visible content to flush, to prevent empty pages with only hidden page breaks
+      const hasVisibleContent = currentPageNodes.some(n => !(n.classList.contains('manual-page-break') || n.getAttribute('data-page-break') === 'true'));
       
-      // Preserve the marker for round-trip editing, but hide it visually in read mode
-      const marker = node.cloneNode(true) as HTMLElement;
-      marker.style.display = 'none';
+      if (currentPageNodes.length > 0 && hasVisibleContent) {
+        flushPage();
+      }
       
-      // We will just put it as the first node of the NEW page
-      currentPageNodes.push(marker);
+      // Keep only one manual page break at the start of a page
+      const alreadyHasBreak = currentPageNodes.some(n => n.classList.contains('manual-page-break') || n.getAttribute('data-page-break') === 'true');
+      if (!alreadyHasBreak) {
+        const marker = node.cloneNode(true) as HTMLElement;
+        marker.style.display = 'none';
+        currentPageNodes.push(marker);
+      }
       continue; 
     }
     const isH1 = tagName === 'h1' || node.querySelector('h1') !== null;

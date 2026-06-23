@@ -286,3 +286,20 @@ h1, h2, h3, h4, h5 {
   background-color: var(--color-brand-linha);
   margin-top: 1.5rem;
 }
+
+/* Defensive layout styles for manual page break markers to never show in standard viewer or print */
+.manual-page-break {
+  display: none !important;
+}
+
+/* Show visual guide only during visual editing, scoped under active editable element */
+.ebook-content[contenteditable="true"] .manual-page-break {
+  display: block !important;
+  border-top: 2px dashed var(--color-brand-terracota, #C9826B) !important;
+  margin: 1.5rem 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  clear: both !important;
+  pointer-events: none;
+}

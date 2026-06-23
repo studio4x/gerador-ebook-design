@@ -890,7 +890,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
          {/* PREVIEW CONTAINER CANVAS */}
          <div className="flex-grow min-w-0 flex flex-col items-center w-full relative">
             {isEditingVisual && (
-              <div className="sticky top-2 z-50 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-xl rounded-xl p-2 mb-4 w-full max-w-4xl flex items-center justify-center gap-1.5 transition-all animate-in slide-in-from-top-4">
+              <div className={`sticky ${isFullscreen ? 'top-[72px]' : 'top-[132px]'} z-30 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-xl rounded-xl p-2 mb-4 w-full max-w-4xl flex items-center justify-center gap-1.5 transition-all animate-in slide-in-from-top-4`}>
                 <button onClick={() => document.execCommand('undo')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" title="Desfazer"><Undo size={16} /></button>
                 <button onClick={() => document.execCommand('redo')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" title="Refazer"><Redo size={16} /></button>
                 <div className="w-px h-6 bg-gray-200 mx-1"></div>
@@ -906,10 +906,18 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                     const sel = window.getSelection();
                     if (sel && sel.rangeCount > 0) {
                       let node = sel.getRangeAt(0).startContainer;
-                      let rootParent: Node | null = node;
-                      // Find the closest block element to insert the break AFTER it
-                      while(rootParent && rootParent.parentElement && rootParent.parentElement.contentEditable !== 'true') {
-                         rootParent = rootParent.parentElement;
+                      
+                      // 1. Detect if the selection target is nested within a highlight box block
+                      const parentElement = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+                      const closestBox = parentElement ? parentElement.closest('.box-reflexao, .box-informativo, .box-cuidado') : null;
+                      
+                      let rootParent: Node | null = closestBox;
+                      if (!rootParent) {
+                        rootParent = node;
+                        // Find the closest block element to insert the break AFTER it
+                        while(rootParent && rootParent.parentElement && rootParent.parentElement.contentEditable !== 'true') {
+                           rootParent = rootParent.parentElement;
+                        }
                       }
 
                       const div = document.createElement('div');
@@ -956,7 +964,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                  el.style.position = '';
                                  el.style.display = '';
                                  el.style.width = '';
-                                 el.innerHTML = '';
+                                 el.innerHTML = 'page-break-placeholder'; // Prevent Turndown from stripping it as a blank node
                               });
                               fullHtml += clone.innerHTML + '\n\n';
                             }
@@ -968,6 +976,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                              emDelimiter: '*'
                          });
                          
+                         // Custom Turndown rules to unwrap visual decorators safely
                          turndownService.addRule('pagebreaks', {
                              filter: function (node) {
                                  return (
@@ -979,8 +988,66 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                  return '\n\n<!-- page-break -->\n\n';
                              }
                          });
+
+                         turndownService.addRule('chapterOpener', {
+                             filter: function (node) {
+                                 return node.nodeName === 'DIV' && node.classList.contains('chapter-opener');
+                             },
+                             replacement: function (content, node) {
+                                 const h1 = node.querySelector('h1');
+                                 const numDiv = node.querySelector('.chapter-number');
+                                 const title = h1 ? h1.textContent?.trim() : '';
+                                 const num = numDiv ? numDiv.textContent?.trim() : '';
+                                 
+                                 let headerText = '';
+                                 if (num && title) {
+                                     const cleanNum = num.replace(/^0+/, ''); // "01" -> "1"
+                                     headerText = `# Capítulo ${cleanNum}: ${title}`;
+                                 } else if (title) {
+                                     headerText = `# ${title}`;
+                                 } else {
+                                     headerText = `# ${content.trim()}`;
+                                 }
+                                 return '\n\n' + headerText + '\n\n';
+                             }
+                         });
+
+                         turndownService.addRule('chapterNumber', {
+                             filter: function (node) {
+                                 return node.nodeName === 'DIV' && node.classList.contains('chapter-number');
+                             },
+                             replacement: function () {
+                                 return '';
+                             }
+                         });
+
+                         turndownService.addRule('fraseCentral', {
+                             filter: function (node) {
+                                 return node.nodeName === 'DIV' && node.classList.contains('frase-central');
+                             },
+                             replacement: function (content) {
+                                 const trimmed = content.trim();
+                                 if (!trimmed) return '';
+                                 const lines = trimmed.split('\n').map(line => `> ${line}`).join('\n');
+                                 return '\n\n' + lines + '\n\n';
+                             }
+                         });
+
+                         turndownService.addRule('unwrapBoxes', {
+                             filter: function (node) {
+                                 return (
+                                     node.nodeName === 'DIV' &&
+                                     (node.classList.contains('box-reflexao') || 
+                                      node.classList.contains('box-informativo') || 
+                                      node.classList.contains('box-cuidado'))
+                                 );
+                             },
+                             replacement: function (content) {
+                                 return '\n\n' + content + '\n\n';
+                             }
+                         });
                          
-                         turndownService.keep(['div', 'span', 'strong', 'em', 'u']);
+                         turndownService.keep(['span', 'u']);
                          const markdown = turndownService.turndown(fullHtml);
                          onContentUpdate(markdown);
                       }
@@ -1006,7 +1073,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                             el.style.position = '';
                             el.style.display = '';
                             el.style.width = '';
-                            el.innerHTML = '';
+                            el.innerHTML = 'page-break-placeholder'; // Prevent Turndown from stripping it as a blank node
                          });
                          fullHtml += clone.innerHTML + '\n\n';
                        }
@@ -1029,8 +1096,66 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                             return '\n\n<!-- page-break -->\n\n';
                         }
                     });
+
+                    turndownService.addRule('chapterOpener', {
+                        filter: function (node) {
+                            return node.nodeName === 'DIV' && node.classList.contains('chapter-opener');
+                        },
+                        replacement: function (content, node) {
+                            const h1 = node.querySelector('h1');
+                            const numDiv = node.querySelector('.chapter-number');
+                            const title = h1 ? h1.textContent?.trim() : '';
+                            const num = numDiv ? numDiv.textContent?.trim() : '';
+                            
+                            let headerText = '';
+                            if (num && title) {
+                                const cleanNum = num.replace(/^0+/, ''); // "01" -> "1"
+                                headerText = `# Capítulo ${cleanNum}: ${title}`;
+                            } else if (title) {
+                                headerText = `# ${title}`;
+                            } else {
+                                headerText = `# ${content.trim()}`;
+                            }
+                            return '\n\n' + headerText + '\n\n';
+                        }
+                    });
+
+                    turndownService.addRule('chapterNumber', {
+                        filter: function (node) {
+                            return node.nodeName === 'DIV' && node.classList.contains('chapter-number');
+                        },
+                        replacement: function () {
+                            return '';
+                        }
+                    });
+
+                    turndownService.addRule('fraseCentral', {
+                        filter: function (node) {
+                            return node.nodeName === 'DIV' && node.classList.contains('frase-central');
+                        },
+                        replacement: function (content) {
+                            const trimmed = content.trim();
+                            if (!trimmed) return '';
+                            const lines = trimmed.split('\n').map(line => `> ${line}`).join('\n');
+                            return '\n\n' + lines + '\n\n';
+                        }
+                    });
+
+                    turndownService.addRule('unwrapBoxes', {
+                        filter: function (node) {
+                            return (
+                                node.nodeName === 'DIV' &&
+                                (node.classList.contains('box-reflexao') || 
+                                 node.classList.contains('box-informativo') || 
+                                 node.classList.contains('box-cuidado'))
+                            );
+                        },
+                        replacement: function (content) {
+                            return '\n\n' + content + '\n\n';
+                        }
+                    });
                     
-                    turndownService.keep(['div', 'span', 'strong', 'em', 'u']);
+                    turndownService.keep(['span', 'u']);
                     const markdown = turndownService.turndown(fullHtml);
                     setIsEditingVisual(false);
                     onContentUpdate(markdown);
