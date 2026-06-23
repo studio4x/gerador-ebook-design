@@ -27,7 +27,9 @@ import {
   Heading3,
   Scissors,
   Maximize,
-  Minimize
+  Minimize,
+  Undo,
+  Redo
 } from 'lucide-react';
 
 interface EbookPreviewProps {
@@ -889,6 +891,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
          <div className="flex-grow min-w-0 flex flex-col items-center w-full relative">
             {isEditingVisual && (
               <div className="sticky top-2 z-50 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-xl rounded-xl p-2 mb-4 w-full max-w-4xl flex items-center justify-center gap-1.5 transition-all animate-in slide-in-from-top-4">
+                <button onClick={() => document.execCommand('undo')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" title="Desfazer"><Undo size={16} /></button>
+                <button onClick={() => document.execCommand('redo')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" title="Refazer"><Redo size={16} /></button>
+                <div className="w-px h-6 bg-gray-200 mx-1"></div>
                 <button onClick={() => document.execCommand('bold')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Negrito"><Bold size={16} /></button>
                 <button onClick={() => document.execCommand('italic')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Itálico"><Italic size={16} /></button>
                 <button onClick={() => document.execCommand('underline')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Sublinhado"><Underline size={16} /></button>
@@ -900,7 +905,13 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                   onClick={() => {
                     const sel = window.getSelection();
                     if (sel && sel.rangeCount > 0) {
-                      const range = sel.getRangeAt(0);
+                      let node = sel.getRangeAt(0).startContainer;
+                      let rootParent: Node | null = node;
+                      // Find the closest block element to insert the break AFTER it
+                      while(rootParent && rootParent.parentElement && rootParent.parentElement.contentEditable !== 'true') {
+                         rootParent = rootParent.parentElement;
+                      }
+
                       const div = document.createElement('div');
                       div.className = 'manual-page-break';
                       div.setAttribute('data-page-break', 'true');
@@ -911,17 +922,25 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                       div.style.position = 'relative';
                       div.style.display = 'block';
                       div.style.width = '100%';
+                      div.contentEditable = 'false';
                       
-                      range.insertNode(div);
+                      if (rootParent && rootParent.parentNode) {
+                          rootParent.parentNode.insertBefore(div, rootParent.nextSibling);
+                      } else {
+                          const range = sel.getRangeAt(0);
+                          range.insertNode(div);
+                      }
                       
                       const p = document.createElement('p');
                       p.innerHTML = '<br/>';
                       div.after(p);
                       
-                      range.setStartAfter(p);
-                      range.setEndAfter(p);
+                      // Move cursor to the new paragraph after the break
+                      const newRange = document.createRange();
+                      newRange.setStart(p, 0);
+                      newRange.collapse(true);
                       sel.removeAllRanges();
-                      sel.addRange(range);
+                      sel.addRange(newRange);
                       
                       // Auto-save and reprocess to apply the break immediately
                       if (onContentUpdate) {

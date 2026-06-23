@@ -275,7 +275,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.58";
+  const buildVersionStr = "v1.4.59";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -574,13 +574,25 @@ export default function App() {
   };
 
   const handleContentUpdateFromPreview = (newMarkdown: string) => {
-    setBlocks([{
-      id: crypto.randomUUID(),
-      filename: "Edições Visuais.md",
-      content: newMarkdown,
-      isEdited: true,
-      updatedAt: new Date().toLocaleString("pt-BR")
-    }]);
+    setBlocks((prev) => {
+      let mergedBlock = prev.length === 1 && prev[0].filename === "Edições Visuais.md" ? prev[0] : null;
+      let newRevisions = [];
+      if (mergedBlock) {
+         newRevisions = mergedBlock.revisions || [];
+         const isDuplicate = newRevisions.length > 0 && newRevisions[newRevisions.length - 1].content === mergedBlock.content;
+         if (!isDuplicate) {
+             newRevisions = [...newRevisions, { id: crypto.randomUUID(), timestamp: new Date().toLocaleString("pt-BR"), content: mergedBlock.content }];
+         }
+      }
+      return [{
+        id: mergedBlock ? mergedBlock.id : crypto.randomUUID(),
+        filename: "Edições Visuais.md",
+        content: newMarkdown,
+        isEdited: true,
+        updatedAt: new Date().toLocaleString("pt-BR"),
+        revisions: newRevisions
+      }];
+    });
     setReprocessTrigger((prev) => prev + 1);
     showToast("Edições visuais salvas no conteúdo com sucesso!", "success");
   };
