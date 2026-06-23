@@ -313,15 +313,88 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return doc.body.innerHTML;
   };
 
+  const HIGHLIGHT_BLOCK_SELECTOR =
+    ".frase-central, blockquote, .box-reflexao, .box-informativo, .box-cuidado";
+
+  const getClosestHighlightBlock = (node: Node | null): HTMLElement | null => {
+    if (!node) return null;
+
+    const el =
+      node.nodeType === Node.ELEMENT_NODE
+        ? (node as HTMLElement)
+        : node.parentElement;
+
+    return el?.closest(HIGHLIGHT_BLOCK_SELECTOR) as HTMLElement | null;
+  };
+
+  const highlightBlockToMarkdown = (el: HTMLElement): string => {
+    const text = (el.textContent || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join("\n");
+
+    if (!text) return "";
+
+    return text
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  };
+
+  const normalizeHighlightBlocksForClipboard = (html: string): string => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    const blockquotes = doc.querySelectorAll("blockquote");
+    blockquotes.forEach((bq) => {
+      const div = doc.createElement("div");
+      div.className = "frase-central";
+      div.innerHTML = bq.innerHTML;
+      bq.replaceWith(div);
+    });
+
+    return doc.body.innerHTML;
+  };
+
+  const convertMarkdownBlockquoteTextToHtml = (text: string): string | null => {
+    const lines = text.split(/\r?\n/);
+    const quoteLines = lines
+      .filter((line) => line.trim().startsWith(">"))
+      .map((line) => line.replace(/^>\s?/, "").trim())
+      .filter(Boolean);
+
+    if (quoteLines.length === 0) return null;
+
+    const content = quoteLines.map((line) => `<p>${line}</p>`).join("");
+
+    return `<div class="frase-central">${content}</div>`;
+  };
+
   const handleEditorCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
 
     const range = sel.getRangeAt(0);
+    const startBlock = getClosestHighlightBlock(range.startContainer);
+    const endBlock = getClosestHighlightBlock(range.endContainer);
+
+    if (startBlock && startBlock === endBlock) {
+      const html = startBlock.outerHTML;
+      const markdown = highlightBlockToMarkdown(startBlock);
+
+      e.clipboardData.setData("text/html", html);
+      e.clipboardData.setData("text/plain", markdown);
+      e.preventDefault();
+      return;
+    }
+
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
 
-    const normalizedHtml = normalizeManualBreaksForClipboard(container.innerHTML);
+    let normalizedHtml = normalizeHighlightBlocksForClipboard(container.innerHTML);
+    normalizedHtml = normalizeManualBreaksForClipboard(normalizedHtml);
+
     const plainText = normalizedHtml
       .replace(/<p>\s*\[=== QUEBRA DE PÁGINA MANUAL ===\]\s*<\/p>/gi, "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n")
       .replace(/<[^>]+>/g, "")
@@ -337,10 +410,32 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     if (!sel || sel.rangeCount === 0) return;
 
     const range = sel.getRangeAt(0);
+    const startBlock = getClosestHighlightBlock(range.startContainer);
+    const endBlock = getClosestHighlightBlock(range.endContainer);
+
+    visualUndoStackRef.current.push(captureVisualSnapshot());
+    visualRedoStackRef.current = [];
+
+    if (startBlock && startBlock === endBlock) {
+      const html = startBlock.outerHTML;
+      const markdown = highlightBlockToMarkdown(startBlock);
+
+      e.clipboardData.setData("text/html", html);
+      e.clipboardData.setData("text/plain", markdown);
+
+      startBlock.remove();
+      repaginateLocalEditors();
+
+      e.preventDefault();
+      return;
+    }
+
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
 
-    const normalizedHtml = normalizeManualBreaksForClipboard(container.innerHTML);
+    let normalizedHtml = normalizeHighlightBlocksForClipboard(container.innerHTML);
+    normalizedHtml = normalizeManualBreaksForClipboard(normalizedHtml);
+
     const plainText = normalizedHtml
       .replace(/<p>\s*\[=== QUEBRA DE PÁGINA MANUAL ===\]\s*<\/p>/gi, "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n")
       .replace(/<[^>]+>/g, "")
@@ -348,9 +443,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
     e.clipboardData.setData("text/html", normalizedHtml);
     e.clipboardData.setData("text/plain", plainText);
-
-    visualUndoStackRef.current.push(captureVisualSnapshot());
-    visualRedoStackRef.current = [];
 
     range.deleteContents();
     sel.removeAllRanges();
@@ -369,7 +461,19 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const html = e.clipboardData.getData("text/html");
     const text = e.clipboardData.getData("text/plain");
 
-    let contentToInsert = html || text.replace(/\n/g, "<br>");
+    let contentToInsert = "";
+
+    if (html) {
+      contentToInsert = normalizeHighlightBlocksForClipboard(html);
+    } else {
+      const blockquoteHtml = convertMarkdownBlockquoteTextToHtml(text);
+
+      if (blockquoteHtml) {
+        contentToInsert = blockquoteHtml;
+      } else {
+        contentToInsert = text.replace(/\n/g, "<br>");
+      }
+    }
 
     contentToInsert = contentToInsert
       .replace(/\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]/gi, '<div class="manual-page-break" data-page-break="true" contenteditable="false">&nbsp;</div>')
