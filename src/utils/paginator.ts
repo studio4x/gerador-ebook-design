@@ -23,28 +23,35 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     let popCount = 0;
     let nonHeadingCount = 0;
 
-    for (let j = currentPageNodes.length - 1; j >= 0; j--) {
-      const lastNode = currentPageNodes[j];
-      const lastTagName = lastNode.tagName.toLowerCase();
-      const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
-      
-      if (isHeading) {
-        if (nonHeadingCount < 2) {
-          popCount = currentPageNodes.length - j;
-        } else {
-          break;
-        }
-      } else {
-        if (lastTagName === 'ul' || lastTagName === 'ol') {
-          nonHeadingCount += lastNode.querySelectorAll('li').length;
-        } else if (lastTagName === 'div' && (lastNode.classList.contains('box-cuidado') || lastNode.classList.contains('box-informativo') || lastNode.classList.contains('box-reflexao'))) {
-          nonHeadingCount += lastNode.querySelectorAll('p, li').length;
-        } else {
-          nonHeadingCount++;
-        }
+    // Detect if this page contains a manual page break
+    const hasManualBreak = currentPageNodes.some(
+      n => n.classList.contains('manual-page-break') || n.getAttribute('data-page-break') === 'true'
+    );
+
+    if (!hasManualBreak) {
+      for (let j = currentPageNodes.length - 1; j >= 0; j--) {
+        const lastNode = currentPageNodes[j];
+        const lastTagName = lastNode.tagName.toLowerCase();
+        const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
         
-        if (nonHeadingCount >= 2 && popCount === 0) {
-          break;
+        if (isHeading) {
+          if (nonHeadingCount < 2) {
+            popCount = currentPageNodes.length - j;
+          } else {
+            break;
+          }
+        } else {
+          if (lastTagName === 'ul' || lastTagName === 'ol') {
+            nonHeadingCount += lastNode.querySelectorAll('li').length;
+          } else if (lastTagName === 'div' && (lastNode.classList.contains('box-cuidado') || lastNode.classList.contains('box-informativo') || lastNode.classList.contains('box-reflexao'))) {
+            nonHeadingCount += lastNode.querySelectorAll('p, li').length;
+          } else {
+            nonHeadingCount++;
+          }
+          
+          if (nonHeadingCount >= 2 && popCount === 0) {
+            break;
+          }
         }
       }
     }
@@ -96,6 +103,9 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
       const hasVisibleContent = currentPageNodes.some(
         n => !(n.classList.contains('manual-page-break') || n.getAttribute('data-page-break') === 'true')
       );
+
+      // Append the manual page break to the current page's nodes so it is retained in the page HTML
+      currentPageNodes.push(node);
 
       if (hasVisibleContent) {
         flushPage();

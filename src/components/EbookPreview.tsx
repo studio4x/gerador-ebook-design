@@ -93,14 +93,11 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         const ref = editorRefs.current[Number(key)];
         if (ref) {
           const clone = ref.cloneNode(true) as HTMLElement;
-          const breaks = clone.querySelectorAll('.manual-page-break') as NodeListOf<HTMLElement>;
+          const breaks = clone.querySelectorAll('.manual-page-break, [data-page-break="true"]') as NodeListOf<HTMLElement>;
           breaks.forEach(el => {
-             el.style.borderTop = '';
-             el.style.margin = '';
-             el.style.position = '';
-             el.style.display = '';
-             el.style.width = '';
-             el.innerHTML = 'page-break-placeholder'; // Prevent Turndown from stripping it as a blank node
+             const marker = document.createElement("p");
+             marker.textContent = "[=== QUEBRA DE PÁGINA MANUAL ===]";
+             el.replaceWith(marker);
           });
           fullHtml += clone.innerHTML + '\n\n';
         }
@@ -121,7 +118,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
              );
          },
          replacement: function () {
-             return '\n\n<!-- page-break -->\n\n';
+             return '\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n';
          }
      });
 
@@ -184,7 +181,12 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
      });
      
      turndownService.keep(['span', 'u']);
-     return turndownService.turndown(fullHtml);
+     
+     let markdown = turndownService.turndown(fullHtml);
+     markdown = markdown
+       .replace(/\n{3,}/g, "\n\n")
+       .replace(/\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]/gi, "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n");
+     return markdown;
   }
 
   function restoreVisualSnapshot(snapshot: VisualSnapshot) {
@@ -1271,6 +1273,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                   onClick={() => {
                     if (!onContentUpdate) return;
                     const markdown = serializeEditorDomToMarkdown();
+                    console.log("MARKDOWN SALVO COM SUCESSO CONTÉM QUEBRA:", markdown.includes("[=== QUEBRA DE PÁGINA MANUAL ===]") || markdown.includes("<!-- page-break -->") ? "SIM! ✅" : "NÃO! ❌");
                     setIsEditingVisual(false);
                     onContentUpdate(markdown);
                   }}
