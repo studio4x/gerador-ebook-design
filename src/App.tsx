@@ -270,7 +270,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.52";
+  const buildVersionStr = "v1.4.54";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -559,9 +559,25 @@ export default function App() {
 
   const handleRestoreDefaultVisuals = () => {
     if (confirm("Deseja realmente restaurar as definições visuais para os padrões? Não afetará seu conteúdo.")) {
-      setSettings(DEFAULT_SETTINGS);
+      const contentMetadata = extractMetadataFromContent(blocks);
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...contentMetadata
+      });
       showToast("Definições visuais restauradas.", "success");
     }
+  };
+
+  const handleContentUpdateFromPreview = (newMarkdown: string) => {
+    setBlocks([{
+      id: crypto.randomUUID(),
+      filename: "Edições Visuais.md",
+      content: newMarkdown,
+      isEdited: true,
+      updatedAt: new Date().toLocaleString("pt-BR")
+    }]);
+    setReprocessTrigger((prev) => prev + 1);
+    showToast("Edições visuais salvas no conteúdo com sucesso!", "success");
   };
 
   const resolveOklchToHsla = (cssText: string): string => {
@@ -1831,7 +1847,7 @@ export default function App() {
       <div
         className={`${activeTab === "preview" ? "block" : "hidden print:block"}`}
       >
-        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} />
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} onContentUpdate={handleContentUpdateFromPreview} />
       </div>
 
       {/* Container invisível exclusivo para renderização e exportação direta de PDF */}

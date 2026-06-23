@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ProjectSettings } from '../types';
+import TurndownService from 'turndown';
 import { 
   BookOpen, 
   Eye, 
@@ -15,7 +16,16 @@ import {
   Info, 
   Heart, 
   HelpCircle,
-  FileText
+  FileText,
+  Edit3,
+  Save,
+  Bold,
+  Italic,
+  Underline,
+  Heading1,
+  Heading2,
+  Heading3,
+  Scissors
 } from 'lucide-react';
 
 interface EbookPreviewProps {
@@ -23,6 +33,7 @@ interface EbookPreviewProps {
   contentPages: string[];
   buildVersion?: string;
   isPrintMode?: boolean;
+  onContentUpdate?: (newMarkdown: string) => void;
 }
 
 interface TocEntry {
@@ -33,11 +44,13 @@ interface TocEntry {
   level?: number;
 }
 
-export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode = false }: EbookPreviewProps) {
+export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode = false, onContentUpdate }: EbookPreviewProps) {
   const [viewMode, setViewMode] = useState<'scroll' | 'book' | 'grid'>(isPrintMode ? 'scroll' : 'scroll');
   const [zoom, setZoom] = useState<number>(isPrintMode ? 100 : 55);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isPrintMode ? false : true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isEditingVisual, setIsEditingVisual] = useState<boolean>(false);
+  const editorRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const [showInstructions, setShowInstructions] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ebook_preview_instructions_visible');
@@ -713,6 +726,21 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                 <span>Grade ({pagesList.length})</span>
               </button>
             </div>
+            
+            <div className="h-5 w-[1px] bg-gray-200 hidden sm:block"></div>
+            
+            <button
+              onClick={() => setIsEditingVisual(!isEditingVisual)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-all text-xs border ${
+                isEditingVisual 
+                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                  : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+              }`}
+              title="Editar visualmente o conteúdo"
+            >
+              <Edit3 size={13} />
+              <span className="hidden sm:inline">{isEditingVisual ? 'Modo Visual: ATIVO' : 'Edição Visual'}</span>
+            </button>
          </div>
          
          {/* Middle Section: Manual Zoom controller (disabled inside Grid Mode) */}
@@ -862,7 +890,100 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
          )}
          
          {/* PREVIEW CONTAINER CANVAS */}
-         <div className="flex-grow min-w-0 flex flex-col items-center w-full">
+         <div className="flex-grow min-w-0 flex flex-col items-center w-full relative">
+            {isEditingVisual && (
+              <div className="sticky top-2 z-50 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-xl rounded-xl p-2 mb-4 w-full max-w-4xl flex items-center justify-center gap-1.5 transition-all animate-in slide-in-from-top-4">
+                <button onClick={() => document.execCommand('bold')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Negrito"><Bold size={16} /></button>
+                <button onClick={() => document.execCommand('italic')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Itálico"><Italic size={16} /></button>
+                <button onClick={() => document.execCommand('underline')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Sublinhado"><Underline size={16} /></button>
+                <div className="w-px h-6 bg-gray-200 mx-1"></div>
+                <button onClick={() => document.execCommand('formatBlock', false, 'H1')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 font-bold hover:bg-gray-200" title="Título Principal">H1</button>
+                <button onClick={() => document.execCommand('formatBlock', false, 'H2')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 font-bold hover:bg-gray-200" title="Subtítulo">H2</button>
+                <div className="w-px h-6 bg-gray-200 mx-1"></div>
+                <button 
+                  onClick={() => {
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount > 0) {
+                      const range = sel.getRangeAt(0);
+                      const div = document.createElement('div');
+                      div.className = 'manual-page-break';
+                      div.setAttribute('data-page-break', 'true');
+                      div.innerHTML = '&nbsp;'; 
+                      
+                      div.style.borderTop = '2px dashed #C9826B';
+                      div.style.margin = '20px 0';
+                      div.style.position = 'relative';
+                      div.style.display = 'block';
+                      div.style.width = '100%';
+                      
+                      range.insertNode(div);
+                      
+                      const p = document.createElement('p');
+                      p.innerHTML = '<br/>';
+                      div.after(p);
+                      
+                      range.setStartAfter(p);
+                      range.setEndAfter(p);
+                      sel.removeAllRanges();
+                      sel.addRange(range);
+                    }
+                  }} 
+                  className="px-3 py-1.5 hover:bg-orange-50 text-[#C9826B] border border-orange-200 rounded-lg flex items-center gap-1.5 text-xs font-bold transition-colors" title="Inserir Quebra de Página Manual">
+                  <Scissors size={14} /> Quebra
+                </button>
+                <div className="w-px h-6 bg-gray-200 mx-1"></div>
+                <button
+                  onClick={() => {
+                    if (!onContentUpdate) return;
+                    
+                    let fullHtml = '';
+                    Object.keys(editorRefs.current).sort((a,b) => Number(a) - Number(b)).forEach(key => {
+                       const ref = editorRefs.current[Number(key)];
+                       if (ref) {
+                         const clone = ref.cloneNode(true) as HTMLElement;
+                         const breaks = clone.querySelectorAll('.manual-page-break') as NodeListOf<HTMLElement>;
+                         breaks.forEach(el => {
+                            el.style.borderTop = '';
+                            el.style.margin = '';
+                            el.style.position = '';
+                            el.style.display = '';
+                            el.style.width = '';
+                            el.innerHTML = '';
+                         });
+                         fullHtml += clone.innerHTML + '\n\n';
+                       }
+                    });
+
+                    const turndownService = new TurndownService({
+                        headingStyle: 'atx',
+                        bulletListMarker: '-',
+                        emDelimiter: '*'
+                    });
+                    
+                    turndownService.addRule('pagebreaks', {
+                        filter: function (node) {
+                            return (
+                                node.nodeName === 'DIV' &&
+                                (node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true')
+                            );
+                        },
+                        replacement: function () {
+                            return '\n\n<!-- page-break -->\n\n';
+                        }
+                    });
+                    
+                    turndownService.keep(['div', 'span', 'strong', 'em', 'u']);
+                    const markdown = turndownService.turndown(fullHtml);
+                    setIsEditingVisual(false);
+                    onContentUpdate(markdown);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg font-bold text-sm flex items-center gap-1.5 ml-auto transition-colors"
+                >
+                  <Save size={14} /> Salvar & Voltar
+                </button>
+              </div>
+            )}
+
             {/* Advice instructions helper card (Dismissible) */}
             {!isPrintMode && showInstructions && (
               <div className="no-print bg-[#FAF8F4]/95 border border-[#C9D8D5]/70 rounded-xl p-3 mb-5 w-full text-xs text-gray-600 leading-normal max-w-4xl shadow-2xs relative flex items-start sm:items-center justify-between gap-3 transition-all">
@@ -1078,7 +1199,10 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                            <section id={p.id} className="page flex flex-col justify-between scroll-mt-6">
                               {renderHeader(false, contentIdx)}
                               <div 
-                                className="ebook-content flex-grow"
+                                ref={(el) => { editorRefs.current[contentIdx] = el; }}
+                                className={`ebook-content flex-grow ${isEditingVisual ? 'outline-none ring-4 ring-blue-400 ring-inset bg-blue-50/10 rounded overflow-visible' : ''}`}
+                                contentEditable={isEditingVisual}
+                                suppressContentEditableWarning={true}
                                 dangerouslySetInnerHTML={{ __html: pageHtml }}
                               />
                               {renderFooter(p.pageNum, false)}
