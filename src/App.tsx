@@ -41,28 +41,28 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User as Fireba
 
 export default function App() {
   const initialSettings: ProjectSettings = {
-    title: "Não é Falta de Disciplina",
-    shortTitle: "Não é Falta de Disciplina",
+    title: "Nome do Seu Livro",
+    shortTitle: "Nome Curto",
     densityMode: "comfortable",
     subtitle:
-      "Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente",
-    supportPhrase: "Rotina possível, não rotina perfeita.",
-    professionalName: "Dra. Deyse Simon",
-    professionalTitle: "Terapeuta Ocupacional e Psicanalista",
-    professionalReg: "CREFITO-3/21465-TO",
-    brand: "Conexão Seres",
-    website: "https://conexaoseres.com.br",
+      "Subtítulo do seu livro digital",
+    supportPhrase: "Uma frase de apoio ou destaque.",
+    professionalName: "Seu Nome",
+    professionalTitle: "Sua Profissão",
+    professionalReg: "Seu Registro",
+    brand: "Sua Marca",
+    website: "https://seusite.com.br",
     materialType: "E-book educativo",
-    targetAudience: "Adultos neurodivergentes e rede de apoio",
+    targetAudience: "Seu Público Alvo",
     ctaText:
-      "Se este material fez sentido para você, talvez seja importante olhar para sua rotina de forma mais individualizada.\n\nA Terapia Ocupacional pode ajudar a compreender como rotina, sensorialidade, energia, ambiente, autonomia e participação se relacionam no seu cotidiano.",
-    ctaButtonText: "Falar com a Conexão Seres",
+      "Se este material fez sentido para você, talvez seja importante olhar para sua situação de forma mais individualizada.\n\nEntre em contato conosco para saber mais.",
+    ctaButtonText: "Falar com a gente",
     contactAddress:
-      "Rua Petrobrás, 683 — Vila Antonieta — São Paulo/SP — CEP 03474-060",
-    instagram: "@conexao.seres",
-    email: "contato@conexaoseres.com.br",
-    whatsapp: "https://wa.me/5511964818096",
-    schedulingUrl: "https://conexaoseres.com.br/agendar-avaliacao-e-contato/",
+      "Seu Endereço Completo",
+    instagram: "@seu.instagram",
+    email: "contato@seusite.com.br",
+    whatsapp: "https://wa.me/5511999999999",
+    schedulingUrl: "https://seusite.com.br/agendar",
     educationalWarning:
       "Este material tem caráter educativo e não substitui avaliação, diagnóstico ou acompanhamento profissional individualizado.",
     generateToc: true,
@@ -74,17 +74,17 @@ export default function App() {
     uploadedAt: new Date().toLocaleString("pt-BR"),
     settings: initialSettings,
     rawContent: [
-      "# Handoff Visual — E-book Conexão Seres",
+      "# Handoff Visual — E-book Padrão",
       "",
-      "**Título:** Não é Falta de Disciplina",
-      "**Subtítulo:** Rotina, energia e sobrecarga sensorial na vida adulta neurodivergente",
+      "**Título:** Nome do Seu Livro",
+      "**Subtítulo:** Subtítulo do seu livro digital",
       "**Modo de Distribuição:** confortável",
       "**Gerar Sumário:** sim",
       "**Borda da Página:** não",
       "**Cabeçalho Descritivo:** sim",
-      "**Texto do Cabeçalho:** Conexão Seres",
+      "**Texto do Cabeçalho:** Sua Marca",
       "**Alinhamento do Cabeçalho:** esquerda",
-      "**Texto do Rodapé:** Conexão Seres | Livro Digital",
+      "**Texto do Rodapé:** Sua Marca | Livro Digital",
       "**Alinhamento do Rodapé:** esquerda",
       "**Numeração de Página:** direita",
     ].join("\n"),
@@ -332,7 +332,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.80";
+  const buildVersionStr = "v1.4.81";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -1973,7 +1973,7 @@ export default function App() {
 
       {/* APP OVERALL FOOTER */}
       <footer className="bg-white border-t border-gray-200 py-4 px-6 text-center text-xs text-gray-500 no-print flex flex-col sm:flex-row justify-between items-center gap-2 mt-auto" id="app-overall-footer-el">
-        <span className="font-sans">© 2026 Conexão Seres — Editor de E-books Profissional</span>
+        <span className="font-sans">© {new Date().getFullYear()} Gerador de E-books Design — Editor Profissional</span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400 font-sans">Versão do App:</span>
           <span className="font-mono bg-blue-50 text-blue-700 border border-blue-100 rounded px-2.5 py-0.5 font-bold tracking-wider text-[11px]" id="app-footer-build-version">

@@ -100,7 +100,7 @@ export function VisualSettingsPanel({ settings, setSettings, onApply, onRestoreD
             
             <div className="space-y-4">
               <Field label="Texto do Rodapé">
-                 <input type="text" placeholder="Ex: © 2026 Conexão Seres" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.footerText || ''} onChange={e => handleChange('footerText', e.target.value)} />
+                 <input type="text" placeholder="Ex: © 2026 Sua Marca" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.footerText || ''} onChange={e => handleChange('footerText', e.target.value)} />
                </Field>
                <Field label="Alinhamento do Rodapé">
                   <select className="w-full border-gray-300 rounded-md text-sm" value={localSettings.footerStyle || 'left'} onChange={e => handleChange('footerStyle', e.target.value)}>

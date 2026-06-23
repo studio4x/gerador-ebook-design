@@ -103,7 +103,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
       text.includes('um convite') || 
       text.includes('chamada para ação') || 
       text.includes('fale conosco') || 
-      text.includes('fale com a conexão seres') || 
+      text.includes('fale com a gente') || 
       text.includes('sobre o agendamento') || 
       text.includes('cta') ||
       text.includes('sumário') ||
@@ -435,7 +435,7 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
   }
 
   // CTA text body
-  const ctaHeaderMatch = mergedMarkdown.match(/(?:#|##|###)\s*(?:um convite|chamada para ação|fale conosco|fale com a conexão seres|sobre o agendamento|cta)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:#|##|###|\n|$))/i);
+  const ctaHeaderMatch = mergedMarkdown.match(/(?:#|##|###)\s*(?:um convite|chamada para ação|fale conosco|fale com a gente|sobre o agendamento|cta)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:#|##|###|\n|$))/i);
   if (ctaHeaderMatch && ctaHeaderMatch[1] && !result.ctaText) {
     let rawText = ctaHeaderMatch[1].trim();
     

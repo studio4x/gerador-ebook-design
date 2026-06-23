@@ -934,7 +934,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   const renderHeader = (isCoverOrFirstPage: boolean, pageIdx?: number) => {
     if (isCoverOrFirstPage) return null;
-    let headerTextVal = settings.headerText || `${settings.brand || 'Conexão Seres'} | ${settings.shortTitle || settings.title || 'E-book'}`;
+    let headerTextVal = settings.headerText || `${settings.brand || 'Sua Marca'} | ${settings.shortTitle || settings.title || 'E-book'}`;
     
     // As per user request, header should be the chapter title context
     if (pageIdx !== undefined && pageChapterTitles[pageIdx]) {
@@ -960,7 +960,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         if (isSensitive) {
              footerTextVal = "Conteúdo educativo. Não substitui avaliação profissional individualizada.";
         } else {
-             const siteHost = settings.website ? settings.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : 'conexaoseres.com.br';
+             const siteHost = settings.website ? settings.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : 'seusite.com.br';
              footerTextVal = `${siteHost}`;
         }
     }
@@ -1016,6 +1016,10 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         });
       }
     }
+    
+    // Jump to content start page number to correct pagination flow after sumário
+    pNum = contentStartPageNum;
+    
     activeContentPages.forEach((_, idx) => {
       const rawCh = pageChapterTitles[idx];
       const fallbackCh = `Capítulo ${idx + 1}`;
@@ -1028,7 +1032,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
     }
     return list;
-  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, activeContentPages, pageChapterTitles, safeSettings]);
+  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, contentStartPageNum, activeContentPages, pageChapterTitles, safeSettings]);
 
   // Perform full search text matching calculation
   const checkPageMatch = (pageId: string) => {

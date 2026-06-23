@@ -49,7 +49,7 @@
   }
 }
 
-.page-break, .chapter-opener {
+.page-break {
   break-before: page;
 }
 
