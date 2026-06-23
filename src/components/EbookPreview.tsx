@@ -214,6 +214,81 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     // O conteúdo será consolidado apenas em "Salvar & Voltar".
   };
 
+  const isCursorAtEndOfEditable = (editable: HTMLElement): boolean => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+
+    const range = sel.getRangeAt(0);
+    if (!editable.contains(range.startContainer)) return false;
+    if (!range.collapsed) return false;
+
+    const testRange = range.cloneRange();
+    testRange.selectNodeContents(editable);
+    testRange.setStart(range.endContainer, range.endOffset);
+
+    return testRange.toString().trim().length === 0;
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, contentIdx: number) => {
+    if (!isEditingVisual) return;
+    
+    if (e.key === 'Delete') {
+      const isAtEnd = isCursorAtEndOfEditable(e.currentTarget);
+      if (isAtEnd) {
+        // Verificar se existe página seguinte
+        const hasNextPage = editorRefs.current[contentIdx + 1] !== undefined || (contentIdx + 1 < activeContentPages.length);
+        if (hasNextPage) {
+          // Impedir o comportamento padrão somente quando for realmente executar a fusão
+          e.preventDefault();
+
+          // Capturar snapshot para undo/redo
+          visualUndoStackRef.current.push(captureVisualSnapshot());
+          visualRedoStackRef.current = [];
+
+          // Juntar o HTML de editorRefs.current
+          const htmls: string[] = [];
+          const numPages = activeContentPages.length;
+          for (let i = 0; i < numPages; i++) {
+            const ref = editorRefs.current[i];
+            if (ref) {
+              htmls.push(ref.innerHTML);
+            } else {
+              htmls.push(activeContentPages[i] || '');
+            }
+          }
+
+          // Remover uma quebra manual se ela estiver no fim da página atual ou início da página seguinte
+          const parser = new DOMParser();
+
+          // Limpar na página atual
+          const docCurrent = parser.parseFromString(htmls[contentIdx], 'text/html');
+          const currentBreaks = docCurrent.querySelectorAll('.manual-page-break, [data-page-break="true"]');
+          if (currentBreaks.length > 0) {
+            currentBreaks.forEach(b => b.remove());
+            htmls[contentIdx] = docCurrent.body.innerHTML;
+          }
+
+          // Limpar na página seguinte
+          if (htmls[contentIdx + 1]) {
+            const docNext = parser.parseFromString(htmls[contentIdx + 1], 'text/html');
+            const nextBreaks = docNext.querySelectorAll('.manual-page-break, [data-page-break="true"]');
+            if (nextBreaks.length > 0) {
+              nextBreaks.forEach(b => b.remove());
+              htmls[contentIdx + 1] = docNext.body.innerHTML;
+            }
+          }
+
+          // Repaginar com chunkIntoPages
+          const joinedHtml = htmls.join('\n');
+          const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
+
+          // Atualizar setLocalContentPages
+          setLocalContentPages(paginatedPages);
+        }
+      }
+    }
+  };
+
   // Lock body scroll when fullscreen is active to avoid double scrolling
   useEffect(() => {
     if (isFullscreen) {
@@ -1379,6 +1454,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                               <div 
                                 ref={(el) => { editorRefs.current[contentIdx] = el; }}
                                 className={`ebook-content flex-grow ${isEditingVisual ? 'outline-none ring-4 ring-blue-400 ring-inset bg-blue-50/10 rounded overflow-visible' : ''}`}
+                                 onKeyDown={(e) => handleEditorKeyDown(e, contentIdx)}
                                 contentEditable={isEditingVisual}
                                 suppressContentEditableWarning={true}
                                 dangerouslySetInnerHTML={{ __html: pageHtml }}
