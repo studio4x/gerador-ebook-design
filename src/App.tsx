@@ -31,7 +31,9 @@ import {
   Edit3,
   FileEdit,
   Scissors,
-  Save
+  Save,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 
 // Import CloudSync & Firebase Auth
@@ -124,6 +126,9 @@ export default function App() {
   const [isSendingPdfEmail, setIsSendingPdfEmail] = useState(false);
   const [isSendingEpubEmail, setIsSendingEpubEmail] = useState(false);
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+
+  // UI states
+  const [isExportOptionsOpen, setIsExportOptionsOpen] = useState(false);
 
   // Sync auth state
   useEffect(() => {
@@ -270,7 +275,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.54";
+  const buildVersionStr = "v1.4.58";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -1589,65 +1594,70 @@ export default function App() {
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
               {/* CHECKLIST */}
               <div className="bg-[#FAF8F4] border border-[#C9D8D5] p-6 rounded-xl shadow-sm mb-8">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                <div 
+                  className="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer select-none"
+                  onClick={() => setIsExportOptionsOpen(!isExportOptionsOpen)}
+                >
                   <h3 className="text-lg font-display font-bold text-[#245C5A] flex items-center">
                     <CheckCircle className="mr-2" /> Opções de Exportação
+                    {isExportOptionsOpen ? <ChevronUp size={20} className="ml-2 text-[#245C5A]"/> : <ChevronDown size={20} className="ml-2 text-[#245C5A]"/>}
                   </h3>
-
-                  <div
-                    className="mt-4 sm:mt-0 flex flex-wrap items-end justify-end gap-3"
-                    id="export-controls-container"
-                  >
-                    <span className="hidden"></span>
-                    <div className="flex items-center gap-2 bg-white border border-gray-300 px-3 py-1.5 rounded-md h-[40px] shadow-xs hover:border-[#245C5A] transition-colors">
-                      <input
-                        type="checkbox"
-                        id="generate-toc-checkbox"
-                        checked={settings.generateToc !== false}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            generateToc: e.target.checked,
-                          })
-                        }
-                        className="w-4 h-4 text-[#245C5A] focus:ring-[#245C5A] border-gray-300 rounded cursor-pointer animate-pulse"
-                      />
-                      <label
-                        htmlFor="generate-toc-checkbox"
-                        className="text-xs font-bold text-[#245C5A] cursor-pointer select-none"
-                      >
-                        Página de Sumário
-                      </label>
-                    </div>
-                    <div
-                      className="flex flex-col items-start text-left"
-                      id="select-wrap-inner-group"
-                    >
-                      <label className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">
-                        Modo de Distribuição (Páginas)
-                      </label>
-                      <select
-                        value={settings.densityMode}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            densityMode: e.target.value as any,
-                          })
-                        }
-                        className="border border-gray-300 rounded-md p-2 focus:ring-[#245C5A] focus:border-[#245C5A] text-sm bg-white"
-                        id="density-select-el"
-                      >
-                        <option value="compact">
-                          Compacto (menos páginas)
-                        </option>
-                        <option value="comfortable">
-                          Confortável (padrão)
-                        </option>
-                        <option value="premium">Premium (mais respiro)</option>
-                      </select>
-                    </div>
-                  </div>
                 </div>
+
+                {isExportOptionsOpen && (
+                  <div className="mt-6 animate-in slide-in-from-top-2 duration-200">
+                    <div
+                      className="flex flex-wrap items-end justify-start sm:justify-end gap-3 mb-6"
+                      id="export-controls-container"
+                    >
+                      <div className="flex items-center gap-2 bg-white border border-gray-300 px-3 py-1.5 rounded-md h-[40px] shadow-xs hover:border-[#245C5A] transition-colors">
+                        <input
+                          type="checkbox"
+                          id="generate-toc-checkbox"
+                          checked={settings.generateToc !== false}
+                          onChange={(e) =>
+                            setSettings({
+                              ...settings,
+                              generateToc: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 text-[#245C5A] focus:ring-[#245C5A] border-gray-300 rounded cursor-pointer animate-pulse"
+                        />
+                        <label
+                          htmlFor="generate-toc-checkbox"
+                          className="text-xs font-bold text-[#245C5A] cursor-pointer select-none"
+                        >
+                          Página de Sumário
+                        </label>
+                      </div>
+                      <div
+                        className="flex flex-col items-start text-left"
+                        id="select-wrap-inner-group"
+                      >
+                        <label className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">
+                          Modo de Distribuição (Páginas)
+                        </label>
+                        <select
+                          value={settings.densityMode}
+                          onChange={(e) =>
+                            setSettings({
+                              ...settings,
+                              densityMode: e.target.value as any,
+                            })
+                          }
+                          className="border border-gray-300 rounded-md p-2 focus:ring-[#245C5A] focus:border-[#245C5A] text-sm bg-white"
+                          id="density-select-el"
+                        >
+                          <option value="compact">
+                            Compacto (menos páginas)
+                          </option>
+                          <option value="comfortable">
+                            Confortável (padrão)
+                          </option>
+                          <option value="premium">Premium (mais respiro)</option>
+                        </select>
+                      </div>
+                    </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#2F3437]">
                   <div className="flex items-center gap-2">
@@ -1816,13 +1826,11 @@ export default function App() {
                     Reprocessar Pré-visualização do PDF
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-3 text-center">
-                  Para gerar o PDF: Selecione 'Salvar como PDF', Tamanho A4,
-                  Margens Nenhuma e Ative Gráficos de Fundo.
-                </p>
               </div>
+              )}
+            </div>
 
-              <div className="bg-white border border-gray-200 p-4 rounded-xl text-center">
+            <div className="bg-white border border-gray-200 p-4 rounded-xl text-center">
                 <p className="text-sm text-gray-500">
                   Preview visual simulando A4.
                 </p>

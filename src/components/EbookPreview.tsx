@@ -25,7 +25,9 @@ import {
   Heading1,
   Heading2,
   Heading3,
-  Scissors
+  Scissors,
+  Maximize,
+  Minimize
 } from 'lucide-react';
 
 interface EbookPreviewProps {
@@ -50,21 +52,20 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isPrintMode ? false : true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isEditingVisual, setIsEditingVisual] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const editorRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
-  const [showInstructions, setShowInstructions] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ebook_preview_instructions_visible');
-      return saved !== 'false';
-    }
-    return true;
-  });
 
-  const toggleInstructions = (val: boolean) => {
-    setShowInstructions(val);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ebook_preview_instructions_visible', String(val));
+  // Lock body scroll when fullscreen is active to avoid double scrolling
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
-  };
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isFullscreen]);
 
   // Automatically adjust default layout representation on smaller screen devices
   useEffect(() => {
@@ -620,7 +621,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   }
 
   return (
-    <div className="ebook-preview-container w-full max-w-full px-2 sm:px-4 mx-auto pb-16" style={customStyles}>
+    <div className={`ebook-preview-container ${isFullscreen ? 'fixed inset-0 z-50 bg-[#F4F4F5] overflow-y-auto px-4 py-4' : 'w-full max-w-full px-2 sm:px-4 mx-auto pb-16'}`} style={customStyles}>
       {/* Dynamic Style injection specifically holding Print rendering settings safe inside any target layout state */}
       <style>{`
         @media print {
@@ -657,7 +658,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
       {/* PREVIEW INTERACTIVE CONTROL BAR (Only displayed inside web app preview) */}
       {!isPrintMode && (
-      <header className="no-print bg-white border border-gray-200/90 rounded-2xl p-3 mb-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm sticky top-[64px] z-40 bg-opacity-95 backdrop-blur-md">
+      <header className={`no-print bg-white border border-gray-200/90 rounded-2xl p-3 mb-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm sticky ${isFullscreen ? 'top-4' : 'top-[64px]'} z-40 bg-opacity-95 backdrop-blur-md`}>
          {/* Left Side: Collapse outline panel + ViewMode toggles */}
          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
             <button 
@@ -670,19 +671,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
               title={sidebarOpen ? "Ocultar Sumário Lateral" : "Exibir Sumário Lateral"}
             >
               {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-            </button>
-            
-            <button 
-              onClick={() => toggleInstructions(!showInstructions)}
-              className={`px-2.5 py-1.5 h-9 rounded-lg transition-all flex items-center justify-center border text-xs gap-1.5 font-bold ${
-                showInstructions 
-                  ? 'bg-amber-50 border-amber-200 text-amber-700' 
-                  : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-              }`}
-              title={showInstructions ? "Ocultar Dicas de Exportação PDF" : "Exibir Dicas de Exportação PDF"}
-            >
-              <Info size={14} />
-              <span className="hidden sm:inline">Como Gerar PDF</span>
             </button>
             
             <div className="h-5 w-[1px] bg-gray-200 hidden sm:block"></div>
@@ -740,6 +728,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
             >
               <Edit3 size={13} />
               <span className="hidden sm:inline">{isEditingVisual ? 'Modo Visual: ATIVO' : 'Edição Visual'}</span>
+            </button>
+
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="flex items-center justify-center w-8 h-8 rounded-md bg-white border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-all"
+              title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+            >
+              {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
             </button>
          </div>
          
@@ -926,6 +922,49 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                       range.setEndAfter(p);
                       sel.removeAllRanges();
                       sel.addRange(range);
+                      
+                      // Auto-save and reprocess to apply the break immediately
+                      if (onContentUpdate) {
+                         let fullHtml = '';
+                         Object.keys(editorRefs.current).sort((a,b) => Number(a) - Number(b)).forEach(key => {
+                            const ref = editorRefs.current[Number(key)];
+                            if (ref) {
+                              const clone = ref.cloneNode(true) as HTMLElement;
+                              const breaks = clone.querySelectorAll('.manual-page-break') as NodeListOf<HTMLElement>;
+                              breaks.forEach(el => {
+                                 el.style.borderTop = '';
+                                 el.style.margin = '';
+                                 el.style.position = '';
+                                 el.style.display = '';
+                                 el.style.width = '';
+                                 el.innerHTML = '';
+                              });
+                              fullHtml += clone.innerHTML + '\n\n';
+                            }
+                         });
+
+                         const turndownService = new TurndownService({
+                             headingStyle: 'atx',
+                             bulletListMarker: '-',
+                             emDelimiter: '*'
+                         });
+                         
+                         turndownService.addRule('pagebreaks', {
+                             filter: function (node) {
+                                 return (
+                                     node.nodeName === 'DIV' &&
+                                     (node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true')
+                                 );
+                             },
+                             replacement: function () {
+                                 return '\n\n<!-- page-break -->\n\n';
+                             }
+                         });
+                         
+                         turndownService.keep(['div', 'span', 'strong', 'em', 'u']);
+                         const markdown = turndownService.turndown(fullHtml);
+                         onContentUpdate(markdown);
+                      }
                     }
                   }} 
                   className="px-3 py-1.5 hover:bg-orange-50 text-[#C9826B] border border-orange-200 rounded-lg flex items-center gap-1.5 text-xs font-bold transition-colors" title="Inserir Quebra de Página Manual">
@@ -984,28 +1023,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
               </div>
             )}
 
-            {/* Advice instructions helper card (Dismissible) */}
-            {!isPrintMode && showInstructions && (
-              <div className="no-print bg-[#FAF8F4]/95 border border-[#C9D8D5]/70 rounded-xl p-3 mb-5 w-full text-xs text-gray-600 leading-normal max-w-4xl shadow-2xs relative flex items-start sm:items-center justify-between gap-3 transition-all">
-                <div className="flex-grow">
-                  <div className="flex items-center gap-1.5 font-bold text-[#245C5A] mb-1">
-                    <BookOpen size={13} className="shrink-0 text-amber-700 animate-pulse" />
-                    <span>Como Exportar o PDF Perfeito:</span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 font-medium">
-                    Aperte <strong className="text-gray-700">Ctrl + P</strong> (ou Cmd + P) • Destino: <strong className="text-gray-700">Salvar como PDF</strong> • Tamanho: <strong className="text-gray-700">A4</strong> • Margens: <strong className="text-gray-700">Nenhuma</strong> • Marcar <strong className="text-gray-700">Gráficos de segundo plano</strong>.
-                  </p>
-                </div>
-                <button
-                  onClick={() => toggleInstructions(false)}
-                  className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-lg transition-all shrink-0 ml-2"
-                  title="Fechar instrução"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-            
             {/* The rendered pages stream */}
             <div 
               className={`ebook-layout-canvas w-full transition-all duration-300 origin-top flex-grow ${

@@ -94,7 +94,14 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     if (isManualPageBreak) {
       if (currentPageNodes.length > 0) flushPage();
-      continue; // Skip rendering the manual break marker itself
+      
+      // Preserve the marker for round-trip editing, but hide it visually in read mode
+      const marker = node.cloneNode(true) as HTMLElement;
+      marker.style.display = 'none';
+      
+      // We will just put it as the first node of the NEW page
+      currentPageNodes.push(marker);
+      continue; 
     }
     const isH1 = tagName === 'h1' || node.querySelector('h1') !== null;
     const isH2 = tagName === 'h2';
