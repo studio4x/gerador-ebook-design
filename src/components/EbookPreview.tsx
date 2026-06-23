@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ProjectSettings } from '../types';
 import TurndownService from 'turndown';
+import { chunkIntoPages } from '../utils/paginator';
 import { 
   BookOpen, 
   Eye, 
@@ -57,8 +58,17 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const editorRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
+  const [localContentPages, setLocalContentPages] = useState<string[]>(contentPages);
+
+  useEffect(() => {
+    setLocalContentPages(contentPages);
+  }, [contentPages]);
+
+  const activeContentPages = isEditingVisual ? localContentPages : contentPages;
+
   type VisualSnapshot = {
     htmlByPage: Record<number, string>;
+    contentPages: string[];
   };
 
   const visualUndoStackRef = useRef<VisualSnapshot[]>([]);
@@ -74,7 +84,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
           htmlByPage[Number(key)] = ref.innerHTML;
         }
       });
-    return { htmlByPage };
+    return { htmlByPage, contentPages: [...activeContentPages] };
   }
 
   function serializeEditorDomToMarkdown(): string {
@@ -178,12 +188,17 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   }
 
   function restoreVisualSnapshot(snapshot: VisualSnapshot) {
-    Object.entries(snapshot.htmlByPage).forEach(([key, html]) => {
-      const ref = editorRefs.current[Number(key)];
-      if (ref) {
-        ref.innerHTML = html;
-      }
-    });
+    if (snapshot.contentPages) {
+      setLocalContentPages(snapshot.contentPages);
+    }
+    setTimeout(() => {
+      Object.entries(snapshot.htmlByPage).forEach(([key, html]) => {
+        const ref = editorRefs.current[Number(key)];
+        if (ref) {
+          ref.innerHTML = html;
+        }
+      });
+    }, 50);
 
     // Não chamar onContentUpdate aqui.
   }
@@ -252,7 +267,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     }
   }, [settings.fontFamily, settings.fontDisplay]);
 
-  const hasNoData = !settings.title && !settings.brand && contentPages.length === 0;
+  const hasNoData = !settings.title && !settings.brand && activeContentPages.length === 0;
 
   // Determine page presence dynamically to calculate exact page offsets
   const hasCapa = !!(settings.title || settings.professionalName);
@@ -265,7 +280,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const parser = new DOMParser();
     const entries: { title: string; relativePageOffset: number; isChapter: boolean; level: number }[] = [];
 
-    contentPages.forEach((pageHtml, index) => {
+    activeContentPages.forEach((pageHtml, index) => {
       const pageDoc = parser.parseFromString(pageHtml, 'text/html');
 
       // Check if it's a chapter opener
@@ -277,14 +292,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         // Find real title if empty
         if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
           let foundRealTitle = '';
-          for (let scanIdx = index; scanIdx < contentPages.length; scanIdx++) {
+          for (let scanIdx = index; scanIdx < activeContentPages.length; scanIdx++) {
             if (scanIdx > index) {
-              const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+              const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
               if (scanDoc.querySelector('.chapter-opener')) {
                 break;
               }
             }
-            const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+            const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
             const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
             for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
               const h = otherHeadings[hIdx];
@@ -357,7 +372,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     });
 
     return entries;
-  }, [contentPages]);
+  }, [activeContentPages]);
 
   // Adjust table of contents entries spacing by Density setting
   const entriesPerPage = useMemo(() => {
@@ -485,7 +500,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     let currentChapterTitle = '';
     const parser = new DOMParser();
 
-    contentPages.forEach((pageHtml, index) => {
+    activeContentPages.forEach((pageHtml, index) => {
       const pageDoc = parser.parseFromString(pageHtml, 'text/html');
       const chapterOpener = pageDoc.querySelector('.chapter-opener');
 
@@ -496,14 +511,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         // Find first real title if titleText is empty or generic
         if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
           let foundRealTitle = '';
-          for (let scanIdx = index; scanIdx < contentPages.length; scanIdx++) {
+          for (let scanIdx = index; scanIdx < activeContentPages.length; scanIdx++) {
             if (scanIdx > index) {
-              const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+              const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
               if (scanDoc.querySelector('.chapter-opener')) {
                 break;
               }
             }
-            const scanDoc = parser.parseFromString(contentPages[scanIdx], 'text/html');
+            const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
             const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
             for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
               const h = otherHeadings[hIdx];
@@ -538,9 +553,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     });
 
     return titles;
-  }, [contentPages]);
+  }, [activeContentPages]);
 
-  const ctaPageNum = contentStartPageNum + contentPages.length;
+  const ctaPageNum = contentStartPageNum + activeContentPages.length;
   const finalPageNum = ctaPageNum + (settings.ctaText ? 1 : 0);
 
   // Compute specific CSS layout variables depending on Density mode for precise reading sizes
@@ -668,7 +683,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         });
       }
     }
-    contentPages.forEach((_, idx) => {
+    activeContentPages.forEach((_, idx) => {
       const rawCh = pageChapterTitles[idx];
       const fallbackCh = `Capítulo ${idx + 1}`;
       list.push({ id: `content-page-${idx}`, label: rawCh || fallbackCh, type: 'conteudo', pageNum: pNum++ });
@@ -680,7 +695,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
     }
     return list;
-  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, contentPages, pageChapterTitles, settings]);
+  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, activeContentPages, pageChapterTitles, settings]);
 
   // Perform full search text matching calculation
   const checkPageMatch = (pageId: string) => {
@@ -706,7 +721,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     }
     if (pageId.startsWith('content-page-')) {
       const idx = parseInt(pageId.replace('content-page-', ''), 10);
-      const htmlContent = contentPages[idx] || '';
+      const htmlContent = activeContentPages[idx] || '';
       const cleanText = htmlContent.replace(/<[^>]*>/g, ' ');
       return cleanText.toLowerCase().includes(query);
     }
@@ -1132,6 +1147,21 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                       sel.removeAllRanges();
                       sel.addRange(newRange);
                       
+                      // Coletar HTML atualizado de todos os editores e repaginar localmente
+                      const htmls: string[] = [];
+                      Object.keys(editorRefs.current)
+                        .sort((a, b) => Number(a) - Number(b))
+                        .forEach((key) => {
+                          const ref = editorRefs.current[Number(key)];
+                          if (ref) {
+                            htmls.push(ref.innerHTML);
+                          }
+                        });
+                      
+                      const joinedHtml = htmls.join('\n');
+                      const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
+                      setLocalContentPages(paginatedPages);
+                      
                       // Não chamar onContentUpdate aqui.
                       // O conteúdo será consolidado apenas ao salvar.
                     }
@@ -1342,7 +1372,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
                        {p.type === 'conteudo' && (() => {
                          const contentIdx = pagesList.filter((x, idx) => idx < pagesList.indexOf(p) && x.type === 'conteudo').length;
-                         const pageHtml = contentPages[contentIdx] || '';
+                         const pageHtml = activeContentPages[contentIdx] || '';
                          return (
                            <section id={p.id} className="page flex flex-col justify-between scroll-mt-6">
                               {renderHeader(false, contentIdx)}
