@@ -270,8 +270,55 @@ export default function App() {
     localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
   }, [blocks]);
 
+  // Intercept Close/Reload attempts and handle tab visibility to keep PDF export active
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isExportingPdf) {
+        const msg = "A geração do seu PDF de alta fidelidade está em andamento. Para garantir que o PDF seja finalizado e salvo com sucesso, por favor mantenha esta aba aberta.";
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+      }
+    };
+
+    const acquireWakeLock = async () => {
+      if (isExportingPdf && 'wakeLock' in navigator) {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+          console.log("Wake Lock acquired successfully.");
+        } catch (err) {
+          console.warn("Failed to acquire Screen Wake Lock:", err);
+        }
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLock) {
+        try {
+          await wakeLock.release();
+          console.log("Wake Lock released.");
+        } catch (err) {
+          console.error("Error releasing Wake Lock:", err);
+        }
+        wakeLock = null;
+      }
+    };
+
+    if (isExportingPdf) {
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      acquireWakeLock();
+    }
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      releaseWakeLock();
+    };
+  }, [isExportingPdf]);
+
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.64";
+  const buildVersionStr = "v1.4.65";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
