@@ -1104,6 +1104,10 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                         }
                       }
 
+                      // Capture snapshot before modifying
+                      visualUndoStackRef.current.push(captureVisualSnapshot());
+                      visualRedoStackRef.current = [];
+
                       const div = document.createElement('div');
                       div.className = 'manual-page-break';
                       div.setAttribute('data-page-break', 'true');
@@ -1136,103 +1140,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                       
                       // Auto-save and reprocess to apply the break immediately
                       if (onContentUpdate) {
-                         let fullHtml = '';
-                         Object.keys(editorRefs.current).sort((a,b) => Number(a) - Number(b)).forEach(key => {
-                            const ref = editorRefs.current[Number(key)];
-                            if (ref) {
-                              const clone = ref.cloneNode(true) as HTMLElement;
-                              const breaks = clone.querySelectorAll('.manual-page-break') as NodeListOf<HTMLElement>;
-                              breaks.forEach(el => {
-                                 el.style.borderTop = '';
-                                 el.style.margin = '';
-                                 el.style.position = '';
-                                 el.style.display = '';
-                                 el.style.width = '';
-                                 el.innerHTML = 'page-break-placeholder'; // Prevent Turndown from stripping it as a blank node
-                              });
-                              fullHtml += clone.innerHTML + '\n\n';
-                            }
-                         });
-
-                         const turndownService = new TurndownService({
-                             headingStyle: 'atx',
-                             bulletListMarker: '-',
-                             emDelimiter: '*'
-                         });
-                         
-                         // Custom Turndown rules to unwrap visual decorators safely
-                         turndownService.addRule('pagebreaks', {
-                             filter: function (node) {
-                                 return (
-                                     node.nodeName === 'DIV' &&
-                                     (node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true')
-                                 );
-                             },
-                             replacement: function () {
-                                 return '\n\n<!-- page-break -->\n\n';
-                             }
-                         });
-
-                         turndownService.addRule('chapterOpener', {
-                             filter: function (node) {
-                                 return node.nodeName === 'DIV' && node.classList.contains('chapter-opener');
-                             },
-                             replacement: function (content, node) {
-                                 const h1 = node.querySelector('h1');
-                                 const numDiv = node.querySelector('.chapter-number');
-                                 const title = h1 ? h1.textContent?.trim() : '';
-                                 const num = numDiv ? numDiv.textContent?.trim() : '';
-                                 
-                                 let headerText = '';
-                                 if (num && title) {
-                                     const cleanNum = num.replace(/^0+/, ''); // "01" -> "1"
-                                     headerText = `# Capítulo ${cleanNum}: ${title}`;
-                                 } else if (title) {
-                                     headerText = `# ${title}`;
-                                 } else {
-                                     headerText = `# ${content.trim()}`;
-                                 }
-                                 return '\n\n' + headerText + '\n\n';
-                             }
-                         });
-
-                         turndownService.addRule('chapterNumber', {
-                             filter: function (node) {
-                                 return node.nodeName === 'DIV' && node.classList.contains('chapter-number');
-                             },
-                             replacement: function () {
-                                 return '';
-                             }
-                         });
-
-                         turndownService.addRule('fraseCentral', {
-                             filter: function (node) {
-                                 return node.nodeName === 'DIV' && node.classList.contains('frase-central');
-                             },
-                             replacement: function (content) {
-                                 const trimmed = content.trim();
-                                 if (!trimmed) return '';
-                                 const lines = trimmed.split('\n').map(line => `> ${line}`).join('\n');
-                                 return '\n\n' + lines + '\n\n';
-                             }
-                         });
-
-                         turndownService.addRule('unwrapBoxes', {
-                             filter: function (node) {
-                                 return (
-                                     node.nodeName === 'DIV' &&
-                                     (node.classList.contains('box-reflexao') || 
-                                      node.classList.contains('box-informativo') || 
-                                      node.classList.contains('box-cuidado'))
-                                 );
-                             },
-                             replacement: function (content) {
-                                 return '\n\n' + content + '\n\n';
-                             }
-                         });
-                         
-                         turndownService.keep(['span', 'u']);
-                         const markdown = turndownService.turndown(fullHtml);
+                         const markdown = serializeEditorDomToMarkdown();
                          onContentUpdate(markdown);
                       }
                     }
