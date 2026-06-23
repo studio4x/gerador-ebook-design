@@ -29,9 +29,6 @@ import {
   Mail,
   LogIn,
   Edit3,
-  FileEdit,
-  Scissors,
-  Save,
   ChevronUp,
   ChevronDown
 } from "lucide-react";
@@ -92,8 +89,7 @@ export default function App() {
     ].join("\n"),
   };
 
-  const [activeTab, setActiveTab] = useState<"content" | "visual" | "edit" | "preview">("content");
-  const textareasRef = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
+  const [activeTab, setActiveTab] = useState<"content" | "visual" | "preview">("content");
   const [settings, setSettings] = useState<ProjectSettings>(() => {
     const saved = localStorage.getItem("ebook_layout_settings");
     if (saved) {
@@ -275,7 +271,7 @@ export default function App() {
   }, [blocks]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.63";
+  const buildVersionStr = "v1.4.64";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -370,26 +366,7 @@ export default function App() {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
 
-  const saveRevision = (id: string) => {
-    setBlocks((prev) => prev.map((b) => {
-      if (b.id !== id) return b;
-      const revisions = b.revisions || [];
-      const isDuplicate = revisions.length > 0 && revisions[revisions.length - 1].content === b.content;
-      if (!isDuplicate) {
-         return {
-           ...b,
-           revisions: [...revisions, { id: crypto.randomUUID(), timestamp: new Date().toLocaleString("pt-BR"), content: b.content }]
-         };
-      }
-      return b;
-    }));
-    showToast("Ajuste salvo como uma nova revisão.", "success");
-  };
 
-  const revertRevision = (blockId: string, revisionContent: string) => {
-     setBlocks((prev) => prev.map((b) => b.id === blockId ? { ...b, content: revisionContent, isEdited: true, updatedAt: new Date().toLocaleString("pt-BR") } : b));
-     showToast("Revisão restaurada.", "success");
-  };
 
   const saveProject = () => {
     const project: EbookProject = { settings, blocks };
@@ -573,6 +550,28 @@ export default function App() {
     }
   };
 
+  /**
+   * handleContentUpdateFromPreview
+   * 
+   * Estratégia de Salvamento de Edições Visuais Integrada (WYSIWYG -> Markdown):
+   * Para assegurar estabilidade máxima de renderização e consistência do compilador PDF/EPUB,
+   * unificamos as alterações de conteúdo realizadas interativamente em um único bloco central ("Edições Visuais.md").
+   * 
+   * Garantias de Estabilidade e Filtros Aplicados:
+   * 1. Sem Duplicidade de Conteúdo: Os nós de quebra manual de página (.manual-page-break) NÃO são inseridos
+   *    pelo paginator no fluxo das páginas ativas, garantindo que o Turndown converta apenas os delimitadores normais, 
+   *    evitando replicação parasitária no Markdown após múltiplos salvamentos.
+   * 2. Detecção de Capítulos Nativa: A marcação de abertura de capítulos (.chapter-opener, .chapter-number) é 
+   *    desembrulhada e convertida de volta para títulos Markdown padronizados h1 (ex: "# Capítulo 1: Título"), permitindo
+   *    que o sumário/TOC dinâmico continue funcionando perfeitamente em futuros reprocessamentos.
+   * 3. Boxes Sem Bordas Duplicadas: Decoradores visuais como .box-reflexao, .box-informativo e .box-cuidado são
+   *    desembrulhados e filtrados de forma a preservar apenas seus textos puros durante a conversão reversa, prevenindo
+   *    a anidação de divs internas após salvar sucessivas vezes.
+   * 4. Integridade das Quebras Manuais: Quebras manuais de página permanecem salvas de forma íntegra no formato nativo
+   *    como "<!-- page-break -->" ou "[=== QUEBRA DE PÁGINA MANUAL ===]".
+   * 5. Sem Degradação de Markdown: A conversão entre HTML renderizado e Markdown obedece a regras restritas do Turndown,
+   *    permitindo salvar infinitas vezes o fluxo sem perda de conteúdo ou replicação de estilos.
+   */
   const handleContentUpdateFromPreview = (newMarkdown: string) => {
     setBlocks((prev) => {
       let mergedBlock = prev.length === 1 && prev[0].filename === "Edições Visuais.md" ? prev[0] : null;
@@ -1123,13 +1122,6 @@ export default function App() {
               <span>Conteúdo</span>
             </button>
             <button
-              onClick={() => setActiveTab("edit")}
-              className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all flex items-center gap-1.5 ${activeTab === "edit" ? "bg-white shadow-xs text-[#245C5A]" : "text-gray-500 hover:text-gray-800"}`}
-            >
-              <FileEdit size={13} />
-              <span>Editar Conteúdo</span>
-            </button>
-            <button
               onClick={() => setActiveTab("visual")}
               className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all flex items-center gap-1.5 ${activeTab === "visual" ? "bg-white shadow-xs text-[#245C5A]" : "text-gray-500 hover:text-gray-800"}`}
             >
@@ -1433,171 +1425,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* TAB: EDIT CONTENT */}
-          {activeTab === "edit" && (
-            <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <h2 className="text-xl font-display font-semibold text-[#2F3437] mb-2 flex items-center gap-2">
-                      <FileEdit size={24} className="text-[#245C5A]" />
-                      Editar Conteúdo
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      Edite os blocos de texto importados, insira quebras manuais e ajuste o fluxo do PDF.
-                    </p>
-                  </div>
-                  <button
-                    onClick={reprocessPreview}
-                    disabled={isGenerating || blocks.length === 0}
-                    className="bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm inline-flex items-center"
-                  >
-                    {isGenerating ? (
-                      <RefreshCw size={16} className="mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw size={16} className="mr-2" />
-                    )}
-                    Salvar e reprocessar preview
-                  </button>
-                </div>
-              </div>
-
-              {blocks.length === 0 ? (
-                <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
-                  <p className="text-gray-500">Nenhum bloco de conteúdo para editar.</p>
-                  <button
-                    onClick={() => setActiveTab("content")}
-                    className="mt-4 text-[#245C5A] hover:underline font-semibold"
-                  >
-                    Volte para a aba Conteúdo para importar arquivos.
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-8">
-                  {blocks.map((block, index) => {
-                    const blockBreakCount = (block.content.match(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)/gi) || []).length;
-                    return (
-                      <React.Fragment key={block.id}>
-                        {index > 0 && (
-                          <div className="flex items-center gap-4 text-gray-400 my-4 select-none">
-                            <hr className="flex-1 border-dashed border-gray-300" />
-                            <div className="text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5 text-gray-400 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
-                              <Scissors size={12} />
-                              Quebra de Página Automática (Entre Blocos)
-                            </div>
-                            <hr className="flex-1 border-dashed border-gray-300" />
-                          </div>
-                        )}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col transition-all">
-                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
-                          <div className="flex flex-col">
-                            <h3 className="font-semibold text-[#2F3437] text-sm flex items-center gap-2">
-                              {block.filename}
-                              {block.isEdited && (
-                                <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-mono">EDITADO</span>
-                              )}
-                            </h3>
-                            {block.updatedAt && (
-                              <span className="text-[10px] text-gray-400">Última edição: {block.updatedAt}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                             <button
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => saveRevision(block.id)}
-                              className="text-xs bg-white border border-[#245C5A] text-[#245C5A] hover:bg-[#245C5A] hover:text-white px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-medium"
-                              title="Salvar ajustes deste bloco (cria uma revisão)"
-                            >
-                              <Save size={12} /> Salvar
-                            </button>
-                             <button
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => {
-                                const ta = textareasRef.current[block.id];
-                                if (ta) {
-                                  let start = ta.selectionStart;
-                                  let end = ta.selectionEnd;
-                                  
-                                  // Se o textarea não estiver focado e o cursor estiver no ínicio, insere no final
-                                  if (document.activeElement !== ta && start === 0 && end === 0) {
-                                    start = block.content.length;
-                                    end = block.content.length;
-                                  }
-
-                                  const newContent = block.content.substring(0, start) + "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n" + block.content.substring(end);
-                                  updateBlockContent(block.id, newContent);
-                                  
-                                  setTimeout(() => {
-                                    ta.focus();
-                                    ta.setSelectionRange(start + 36, start + 36);
-                                  }, 0);
-                                } else {
-                                  const newContent = block.content + "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n";
-                                  updateBlockContent(block.id, newContent);
-                                }
-                              }}
-                              className="text-xs bg-white border border-[#245C5A] text-[#245C5A] hover:bg-gray-50 px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-medium"
-                              title="Inserir quebra de página manual na posição do cursor"
-                            >
-                              <Scissors size={12} /> Add Quebra
-                            </button>
-                            <button
-                               onMouseDown={(e) => e.preventDefault()}
-                               onClick={() => {
-                                 const cleanContent = block.content.replace(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)\n?/gi, "");
-                                 updateBlockContent(block.id, cleanContent);
-                                 showToast("Quebras manuais removidas deste bloco.", "success");
-                               }}
-                               className="text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1.5 rounded transition-colors font-medium border border-red-200"
-                               title="Limpar todas as quebras de página manuais"
-                            >
-                               Remover Quebras
-                            </button>
-                          </div>
-                        </div>
-                        {blockBreakCount > 0 && (
-                          <div className="bg-blue-50/50 px-4 py-2 text-xs text-blue-700 font-medium border-b border-blue-100 flex items-center gap-2">
-                             <CheckCircle size={12} className="text-blue-500" />
-                             Este bloco contém {blockBreakCount} quebra{blockBreakCount > 1 ? "s" : ""} de página manual.
-                          </div>
-                        )}
-                        {(block.revisions && block.revisions.length > 0) && (
-                          <div className="bg-gray-50 px-4 py-2 text-xs border-b border-gray-200 flex items-center gap-2 overflow-x-auto">
-                            <History size={12} className="text-gray-500" />
-                            <span className="text-gray-600 font-medium mr-2">Revisões:</span>
-                            {block.revisions.map((rev, idx) => (
-                              <button
-                                key={rev.id}
-                                onClick={() => revertRevision(block.id, rev.content)}
-                                className="text-[10px] bg-white border border-gray-300 text-gray-600 px-2 py-1 rounded hover:bg-gray-100 whitespace-nowrap"
-                                title="Clique para restaurar esta versão"
-                              >
-                                Rev {idx + 1} ({rev.timestamp})
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        <div className="p-0 flex-1 relative">
-                          <textarea
-                            ref={(el) => { textareasRef.current[block.id] = el; }}
-                            className="w-full h-64 p-4 text-sm font-mono text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#245C5A] resize-y border-none"
-                            value={block.content}
-                            onChange={(e) => {
-                              updateBlockContent(block.id, e.target.value);
-                            }}
-                            placeholder="Escreva ou edite o conteúdo (suporta Markdown)..."
-                            spellCheck={false}
-                          />
-                        </div>
-                      </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           )}
 
