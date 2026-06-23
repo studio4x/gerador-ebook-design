@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { ProjectSettings } from '../types';
+import { ProjectSettings, DEFAULT_SETTINGS } from '../types';
 import TurndownService from 'turndown';
 import { chunkIntoPages } from '../utils/paginator';
 import { 
@@ -58,13 +58,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const editorRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-  const [localContentPages, setLocalContentPages] = useState<string[]>(contentPages);
+  const [localContentPages, setLocalContentPages] = useState<string[] | null>(null);
 
-  useEffect(() => {
-    setLocalContentPages(contentPages);
-  }, [contentPages]);
-
-  const activeContentPages = isEditingVisual ? localContentPages : contentPages;
+  const activeContentPages = (isEditingVisual && localContentPages) ? localContentPages : contentPages;
 
   type VisualSnapshot = {
     htmlByPage: Record<number, string>;
@@ -366,13 +362,19 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     }
   }, [settings.fontFamily, settings.fontDisplay]);
 
-  const hasNoData = !settings.title && !settings.brand && activeContentPages.length === 0;
+  const safeSettings = useMemo(() => ({
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    generateToc: settings.generateToc !== false
+  }), [settings]);
+
+  const hasNoData = !safeSettings.title && !safeSettings.brand && activeContentPages.length === 0;
 
   // Determine page presence dynamically to calculate exact page offsets
-  const hasCapa = !!(settings.title || settings.professionalName);
-  const hasRosto = !!(settings.title || settings.subtitle || settings.supportPhrase);
-  const hasAviso = !!settings.educationalWarning;
-  const hasSumario = settings.generateToc !== false;
+  const hasCapa = !!(safeSettings.title || safeSettings.professionalName);
+  const hasRosto = !!(safeSettings.title || safeSettings.subtitle || safeSettings.supportPhrase);
+  const hasAviso = !!safeSettings.educationalWarning;
+  const hasSumario = safeSettings.generateToc;
 
   // Extract raw chapters / principal headings from parsed HTML of the content pages, memoized for performance
   const rawTocEntries = useMemo(() => {
@@ -787,14 +789,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       const fallbackCh = `Capítulo ${idx + 1}`;
       list.push({ id: `content-page-${idx}`, label: rawCh || fallbackCh, type: 'conteudo', pageNum: pNum++ });
     });
-    if (settings.ctaText) {
+    if (safeSettings.ctaText) {
       list.push({ id: 'cta-page', label: 'Convite / CTA', type: 'cta', pageNum: pNum++ });
     }
-    if (settings.brand || settings.professionalName || settings.website || settings.whatsapp || settings.email) {
+    if (safeSettings.brand || safeSettings.professionalName || safeSettings.website || safeSettings.whatsapp || safeSettings.email) {
       list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
     }
     return list;
-  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, activeContentPages, pageChapterTitles, settings]);
+  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, activeContentPages, pageChapterTitles, safeSettings]);
 
   // Perform full search text matching calculation
   const checkPageMatch = (pageId: string) => {
@@ -802,18 +804,18 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const query = searchQuery.toLowerCase();
     
     if (pageId === 'capa-page') {
-      return (settings.title || '').toLowerCase().includes(query) ||
-             (settings.subtitle || '').toLowerCase().includes(query) ||
-             (settings.professionalName || '').toLowerCase().includes(query) ||
-             (settings.brand || '').toLowerCase().includes(query);
+      return (safeSettings.title || '').toLowerCase().includes(query) ||
+             (safeSettings.subtitle || '').toLowerCase().includes(query) ||
+             (safeSettings.professionalName || '').toLowerCase().includes(query) ||
+             (safeSettings.brand || '').toLowerCase().includes(query);
     }
     if (pageId === 'rosto-page') {
-      return (settings.title || '').toLowerCase().includes(query) ||
-             (settings.subtitle || '').toLowerCase().includes(query) ||
-             (settings.supportPhrase || '').toLowerCase().includes(query);
+      return (safeSettings.title || '').toLowerCase().includes(query) ||
+             (safeSettings.subtitle || '').toLowerCase().includes(query) ||
+             (safeSettings.supportPhrase || '').toLowerCase().includes(query);
     }
     if (pageId === 'aviso-page') {
-      return (settings.educationalWarning || '').toLowerCase().includes(query);
+      return (safeSettings.educationalWarning || '').toLowerCase().includes(query);
     }
     if (pageId.startsWith('sumario-page-')) {
       return 'sumário sumario índice indice capítulos capitulos'.includes(query);
@@ -825,14 +827,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       return cleanText.toLowerCase().includes(query);
     }
     if (pageId === 'cta-page') {
-      return (settings.ctaText || '').toLowerCase().includes(query) ||
-             (settings.ctaButtonText || '').toLowerCase().includes(query);
+      return (safeSettings.ctaText || '').toLowerCase().includes(query) ||
+             (safeSettings.ctaButtonText || '').toLowerCase().includes(query);
     }
     if (pageId === 'final-page') {
-      return (settings.brand || '').toLowerCase().includes(query) ||
-             (settings.professionalName || '').toLowerCase().includes(query) ||
-             (settings.website || '').toLowerCase().includes(query) ||
-             (settings.contactAddress || '').toLowerCase().includes(query);
+      return (safeSettings.brand || '').toLowerCase().includes(query) ||
+             (safeSettings.professionalName || '').toLowerCase().includes(query) ||
+             (safeSettings.website || '').toLowerCase().includes(query) ||
+             (safeSettings.contactAddress || '').toLowerCase().includes(query);
     }
     return false;
   };
@@ -976,7 +978,15 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
             <div className="h-5 w-[1px] bg-gray-200 hidden sm:block"></div>
             
             <button
-              onClick={() => setIsEditingVisual(!isEditingVisual)}
+              onClick={() => {
+                if (!isEditingVisual) {
+                  setLocalContentPages([...contentPages]);
+                  setIsEditingVisual(true);
+                } else {
+                  setIsEditingVisual(false);
+                  setLocalContentPages(null);
+                }
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-all text-xs border ${
                 isEditingVisual 
                   ? 'bg-blue-50 text-blue-700 border-blue-200' 
@@ -1275,6 +1285,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                     const markdown = serializeEditorDomToMarkdown();
                     console.log("MARKDOWN SALVO COM SUCESSO CONTÉM QUEBRA:", markdown.includes("[=== QUEBRA DE PÁGINA MANUAL ===]") || markdown.includes("<!-- page-break -->") ? "SIM! ✅" : "NÃO! ❌");
                     setIsEditingVisual(false);
+                    setLocalContentPages(null);
                     onContentUpdate(markdown);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg font-bold text-sm flex items-center gap-1.5 ml-auto transition-colors"
@@ -1341,29 +1352,29 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                            <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FAF8F4] rounded-tr-full opacity-50 -z-10"></div>
                            
                            <div className="mb-12">
-                             {settings.materialType && (
+                             {safeSettings.materialType && (
                                <span className="inline-block bg-[#245C5A] text-white px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-semibold mb-4">
-                                 {settings.materialType.replace(/de baixo ticket/gi, "").replace(/baixo ticket/gi, "").replace(/barato/gi, "").replace(/\s+/g, " ").trim()}
+                                 {safeSettings.materialType.replace(/de baixo ticket/gi, "").replace(/baixo ticket/gi, "").replace(/barato/gi, "").replace(/\s+/g, " ").trim()}
                                </span>
                              )}
                              <h1 className="text-5xl md:text-6xl font-display text-[#245C5A] font-bold leading-tight mb-4">
-                               {settings.title}
+                               {safeSettings.title}
                              </h1>
                              <h2 className="text-2xl text-[#6F8F9A] font-sans font-medium max-w-2xl">
-                               {settings.subtitle}
+                               {safeSettings.subtitle}
                              </h2>
                            </div>
 
                            <div className="mt-auto">
                              <div className="w-16 h-1 bg-[#C9826B] mb-6"></div>
-                             <p className="font-bold text-[#2F3437] text-lg uppercase tracking-wide">{settings.professionalName}</p>
-                             <p className="text-[#6F8F9A]">{settings.professionalTitle}</p>
-                             <p className="text-[#6F8F9A] text-sm">{settings.professionalReg}</p>
+                             <p className="font-bold text-[#2F3437] text-lg uppercase tracking-wide">{safeSettings.professionalName}</p>
+                             <p className="text-[#6F8F9A]">{safeSettings.professionalTitle}</p>
+                             <p className="text-[#6F8F9A] text-sm">{safeSettings.professionalReg}</p>
                            </div>
                            
-                           {settings.brand && (
+                           {safeSettings.brand && (
                              <div className="absolute bottom-10 right-10 flex items-center gap-2">
-                                 <span className="text-[#245C5A] font-display font-semibold text-xl tracking-tight">{settings.brand}</span>
+                                 <span className="text-[#245C5A] font-display font-semibold text-xl tracking-tight">{safeSettings.brand}</span>
                              </div>
                            )}
                          </section>
@@ -1371,14 +1382,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
                        {p.type === 'rosto' && (
                          <section id="rosto-page" className="page flex flex-col items-center justify-center text-center select-none">
-                            <h1 className="text-4xl font-display text-[#245C5A] font-bold mb-4">{settings.title}</h1>
-                            <h2 className="text-xl text-[#6F8F9A] mb-8">{settings.subtitle}</h2>
-                            <p className="max-w-md mx-auto italic text-[#2F3437] mb-12">{settings.supportPhrase}</p>
+                            <h1 className="text-4xl font-display text-[#245C5A] font-bold mb-4">{safeSettings.title}</h1>
+                            <h2 className="text-xl text-[#6F8F9A] mb-8">{safeSettings.subtitle}</h2>
+                            <p className="max-w-md mx-auto italic text-[#2F3437] mb-12">{safeSettings.supportPhrase}</p>
                             
                             <div className="mt-12">
-                               <p className="font-bold text-[#2F3437]">{settings.professionalName}</p>
-                               <p className="text-[#6F8F9A]">{settings.professionalTitle}</p>
-                               <p className="text-[#6F8F9A] text-sm">{settings.professionalReg}</p>
+                               <p className="font-bold text-[#2F3437]">{safeSettings.professionalName}</p>
+                               <p className="text-[#6F8F9A]">{safeSettings.professionalTitle}</p>
+                               <p className="text-[#6F8F9A] text-sm">{safeSettings.professionalReg}</p>
                             </div>
                          </section>
                        )}
@@ -1389,7 +1400,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                             
                             <div className="box-cuidado w-full max-w-2xl mx-auto my-auto text-left">
                                 <h3 className="text-2xl font-display font-semibold mb-4">⚠️ Aviso Importante</h3>
-                                {(settings.educationalWarning || '').split('\n\n').map((paragraph, i) => (
+                                {(safeSettings.educationalWarning || '').split('\n\n').map((paragraph, i) => (
                                     <p key={i} className="mb-4 last:mb-0 text-[#2F3437]">{paragraph}</p>
                                 ))}
                             </div>
@@ -1495,20 +1506,20 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                             <div className="max-w-2xl mx-auto my-auto flex-grow flex flex-col justify-center">
                                 <h2 className="text-3xl font-display font-bold text-[#245C5A] mb-6">Um convite</h2>
                                 <div className="box-informativo bg-white">
-                                    {(settings.ctaText || '').split('\n\n').map((paragraph, i) => (
+                                    {(safeSettings.ctaText || '').split('\n\n').map((paragraph, i) => (
                                         <p key={i} className="mb-4 last:mb-0 text-[#2F3437]">{paragraph}</p>
                                     ))}
                                 </div>
                                 
-                                {(settings.whatsapp || settings.schedulingUrl) && (
-                                    <a href={settings.schedulingUrl || settings.whatsapp} target="_blank" rel="noreferrer" className="inline-block mt-8 bg-[#245C5A] text-white px-8 py-4 rounded-lg font-bold hover:bg-[#1b4342] transition-colors no-print w-fit">
-                                        {settings.ctaButtonText || 'Saiba Mais'}
+                                {(safeSettings.whatsapp || safeSettings.schedulingUrl) && (
+                                    <a href={safeSettings.schedulingUrl || safeSettings.whatsapp} target="_blank" rel="noreferrer" className="inline-block mt-8 bg-[#245C5A] text-white px-8 py-4 rounded-lg font-bold hover:bg-[#1b4342] transition-colors no-print w-fit">
+                                        {safeSettings.ctaButtonText || 'Saiba Mais'}
                                     </a>
                                 )}
-                                {(settings.schedulingUrl || settings.whatsapp) && (
+                                {(safeSettings.schedulingUrl || safeSettings.whatsapp) && (
                                   <p className="mt-4 text-sm text-[#6F8F9A] hidden print:block">
                                       Para agendamentos e mais informações, acesse: <br/>
-                                      <strong>{settings.schedulingUrl || settings.whatsapp}</strong>
+                                      <strong>{safeSettings.schedulingUrl || safeSettings.whatsapp}</strong>
                                   </p>
                                 )}
                             </div>
@@ -1521,22 +1532,22 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                          <section id="final-page" className="page flex flex-col justify-between scroll-mt-6">
                              {renderHeader(false)}
                              <div className="mt-10 mb-auto">
-                                 <h1 className="text-2xl font-display font-bold text-[#245C5A] mb-2">{settings.brand}</h1>
-                                 {settings.brand && <p className="text-[#6F8F9A] mb-12">Clínica de Terapia Ocupacional</p>}
+                                 <h1 className="text-2xl font-display font-bold text-[#245C5A] mb-2">{safeSettings.brand}</h1>
+                                 {safeSettings.brand && <p className="text-[#6F8F9A] mb-12">Clínica de Terapia Ocupacional</p>}
 
                                  <div className="mb-8">
-                                     <p className="font-bold text-[#2F3437]">{settings.professionalName}</p>
-                                     <p className="text-[#2F3437]">{settings.professionalTitle}</p>
-                                     <p className="text-[#6F8F9A] text-sm">{settings.professionalReg}</p>
+                                     <p className="font-bold text-[#2F3437]">{safeSettings.professionalName}</p>
+                                     <p className="text-[#2F3437]">{safeSettings.professionalTitle}</p>
+                                     <p className="text-[#6F8F9A] text-sm">{safeSettings.professionalReg}</p>
                                  </div>
 
                                  <div className="space-y-2 text-[#2F3437]">
-                                     {settings.website && <p><strong>Site:</strong> {settings.website}</p>}
-                                     {settings.instagram && <p><strong>Instagram:</strong> {settings.instagram}</p>}
-                                     {settings.email && <p><strong>E-mail:</strong> {settings.email}</p>}
-                                     {settings.whatsapp && <p className="no-print"><strong>WhatsApp:</strong> <a href={settings.whatsapp} target="_blank" rel="noreferrer" className="text-[#245C5A] underline">{getFormattedWhatsapp(settings.whatsapp)}</a></p>}
-                                     {settings.whatsapp && <p className="hidden print:block"><strong>WhatsApp:</strong> {getFormattedWhatsapp(settings.whatsapp)}</p>}
-                                     {settings.contactAddress && <p className="mt-4 max-w-md"><strong className="block">Endereço:</strong> {settings.contactAddress}</p>}
+                                     {safeSettings.website && <p><strong>Site:</strong> {safeSettings.website}</p>}
+                                     {safeSettings.instagram && <p><strong>Instagram:</strong> {safeSettings.instagram}</p>}
+                                     {safeSettings.email && <p><strong>E-mail:</strong> {safeSettings.email}</p>}
+                                     {safeSettings.whatsapp && <p className="no-print"><strong>WhatsApp:</strong> <a href={safeSettings.whatsapp} target="_blank" rel="noreferrer" className="text-[#245C5A] underline">{getFormattedWhatsapp(safeSettings.whatsapp)}</a></p>}
+                                     {safeSettings.whatsapp && <p className="hidden print:block"><strong>WhatsApp:</strong> {getFormattedWhatsapp(safeSettings.whatsapp)}</p>}
+                                     {safeSettings.contactAddress && <p className="mt-4 max-w-md"><strong className="block">Endereço:</strong> {safeSettings.contactAddress}</p>}
                                  </div>
                              </div>
                              

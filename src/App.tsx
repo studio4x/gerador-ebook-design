@@ -332,22 +332,31 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.75";
+  const buildVersionStr = "v1.4.76";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (blocks.length > 0) {
         const contentMetadata = extractMetadataFromContent(blocks);
-        if (Object.keys(contentMetadata).length > 0) {
+        
+        const cleanMetadata = Object.fromEntries(
+          Object.entries(contentMetadata).filter(([_, value]) => {
+            if (value === undefined || value === null) return false;
+            if (typeof value === "string" && value.trim() === "") return false;
+            return true;
+          })
+        );
+
+        if (Object.keys(cleanMetadata).length > 0) {
           setSettings((prev) => {
             let hasChange = false;
             const merged = { ...prev };
-            for (const key of Object.keys(contentMetadata) as Array<
+            for (const key of Object.keys(cleanMetadata) as Array<
               keyof ProjectSettings
             >) {
-              if (prev[key] !== contentMetadata[key]) {
-                (merged as any)[key] = contentMetadata[key];
+              if (prev[key] !== cleanMetadata[key]) {
+                (merged as any)[key] = cleanMetadata[key];
                 hasChange = true;
               }
             }
@@ -533,6 +542,14 @@ export default function App() {
       // 1. Extract metadata from content
       const contentMetadata = extractMetadataFromContent(blocks);
 
+      const cleanMetadata = Object.fromEntries(
+        Object.entries(contentMetadata).filter(([_, value]) => {
+          if (value === undefined || value === null) return false;
+          if (typeof value === "string" && value.trim() === "") return false;
+          return true;
+        })
+      );
+
       let merged: ProjectSettings;
 
       if (newSettings) {
@@ -540,14 +557,15 @@ export default function App() {
         // The newSettings represent the absolute truth of what the settings should be right now.
         // We DO NOT want the old markdown content to overwrite these new edits immediately.
         merged = {
-            ...contentMetadata,
+            ...settings, // Preserve base settings
+            ...cleanMetadata,
             ...newSettings, // Explicit user UI overrides win!
         } as ProjectSettings;
       } else {
         // Normal reprocessing (e.g., text changed, or initial load)
         merged = {
             ...settings, // Current settings
-            ...contentMetadata, // New markdown metadata wins!
+            ...cleanMetadata, // New markdown metadata wins!
         } as ProjectSettings;
       }
 
