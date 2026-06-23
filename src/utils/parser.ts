@@ -343,10 +343,13 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
 
   // Title
   if (!result.title) {
-    const titleMatch = findValueInLines(/^#\s+(?!aviso|cta|conexão|chamada|um convite|conteúdo|parte|bloco|sumário|sumario|índice|indice|index|table of contents)(.*)$/i);
+    const titleMatch = findValueInLines(/^#\s+(?!aviso|cta|conexão|conexao|chamada|um convite|conteúdo|conteudo|capítulo|capitulo|chapter|seção|secao|parte|bloco|sumário|sumario|índice|indice|index|table of contents)(.*)$/i);
     if (titleMatch) {
-      result.title = titleMatch;
-      result.shortTitle = titleMatch;
+      const looksLikeChapterTitle = /^(capítulo|capitulo|chapter)\s+\d+/i.test(titleMatch.trim());
+      if (!looksLikeChapterTitle) {
+        result.title = titleMatch;
+        result.shortTitle = titleMatch;
+      }
     }
   }
 

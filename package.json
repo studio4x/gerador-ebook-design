@@ -1,7 +1,7 @@
 {
   "name": "gerador-ebook-design",
   "private": true,
-  "version": "1.4.76",
+  "version": "1.4.77",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

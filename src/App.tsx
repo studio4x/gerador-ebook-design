@@ -332,13 +332,20 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.76";
+  const buildVersionStr = "v1.4.77";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (blocks.length > 0) {
+        const isVisualEditsOnly = blocks.length === 1 && blocks[0].filename === "Edições Visuais.md";
+        const hasFrontmatter = isVisualEditsOnly && /^---\r?\n[\s\S]*?\r?\n---/.test(blocks[0].content);
+
         const contentMetadata = extractMetadataFromContent(blocks);
+
+        if (isVisualEditsOnly && !hasFrontmatter) {
+          return;
+        }
         
         const cleanMetadata = Object.fromEntries(
           Object.entries(contentMetadata).filter(([_, value]) => {
@@ -540,12 +547,17 @@ export default function App() {
     setIsGenerating(true);
     try {
       // 1. Extract metadata from content
+      const isVisualEditsOnly = blocks.length === 1 && blocks[0].filename === "Edições Visuais.md";
+      const hasFrontmatter = isVisualEditsOnly && /^---\r?\n[\s\S]*?\r?\n---/.test(blocks[0].content);
+
       const contentMetadata = extractMetadataFromContent(blocks);
 
       const cleanMetadata = Object.fromEntries(
-        Object.entries(contentMetadata).filter(([_, value]) => {
+        Object.entries(contentMetadata).filter(([key, value]) => {
           if (value === undefined || value === null) return false;
           if (typeof value === "string" && value.trim() === "") return false;
+          // Protect from visual edits without frontmatter trying to overwrite settings
+          if (isVisualEditsOnly && !hasFrontmatter) return false;
           return true;
         })
       );
@@ -685,6 +697,35 @@ export default function App() {
    */
   const handleContentUpdateFromPreview = (newMarkdown: string) => {
     createContentRevision("visual-editor", "Antes de salvar edição visual");
+
+    const escapeYamlValue = (value?: string) =>
+      String(value || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"');
+
+    const buildFrontmatterFromSettings = (settingsObj: ProjectSettings): string => {
+      const lines = [
+        "---",
+        `title: "${escapeYamlValue(settingsObj.title)}"`,
+        `subtitle: "${escapeYamlValue(settingsObj.subtitle)}"`,
+        `autora: "${escapeYamlValue(settingsObj.professionalName)}"`,
+        `credencial: "${escapeYamlValue(
+          [settingsObj.professionalTitle, settingsObj.professionalReg].filter(Boolean).join(" — ")
+        )}"`,
+        `instituicao: "${escapeYamlValue(settingsObj.brand)}"`,
+        `website: "${escapeYamlValue(settingsObj.website)}"`,
+        `ctatext: "${escapeYamlValue(settingsObj.ctaText)}"`,
+        `warning: "${escapeYamlValue(settingsObj.educationalWarning)}"`,
+        "---",
+        ""
+      ];
+      return lines.join("\n");
+    };
+
+    const frontmatter = buildFrontmatterFromSettings(settings);
+    const markdownBody = newMarkdown.replace(/^---\r?\n[\s\S]*?\r?\n---\s*/m, "");
+    const markdownWithFrontmatter = `${frontmatter}${markdownBody.trimStart()}`;
+
     setBlocks((prev) => {
       let mergedBlock = prev.length === 1 && prev[0].filename === "Edições Visuais.md" ? prev[0] : null;
       let newRevisions = [];
@@ -698,7 +739,7 @@ export default function App() {
       return [{
         id: mergedBlock ? mergedBlock.id : crypto.randomUUID(),
         filename: "Edições Visuais.md",
-        content: newMarkdown,
+        content: markdownWithFrontmatter,
         isEdited: true,
         updatedAt: new Date().toLocaleString("pt-BR"),
         revisions: newRevisions
