@@ -318,7 +318,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.66";
+  const buildVersionStr = "v1.4.67";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -898,6 +898,15 @@ export default function App() {
         throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
       }
 
+      // Map page element IDs to their final PDF page number (1-based index)
+      const pageIdToPdfPageNumber = new Map<string, number>();
+      pages.forEach((page, index) => {
+        const id = (page as HTMLElement).id;
+        if (id) {
+          pageIdToPdfPageNumber.set(id, index + 1);
+        }
+      });
+
       // Initialize A4 Portrait PDF: 210mm x 297mm
       const doc = new jsPDF({
         orientation: "portrait",
@@ -1076,6 +1085,46 @@ export default function App() {
 
         // Add to page
         doc.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+
+        // Detect internal and external links present on this page element and add clickable annotations to the PDF
+        const linksOnPage = Array.from(pageEl.querySelectorAll<HTMLAnchorElement>('a[href]'));
+
+        linksOnPage.forEach((link) => {
+          const href = link.getAttribute("href");
+          if (!href) return;
+
+          const linkRect = link.getBoundingClientRect();
+          const pageRect = pageEl.getBoundingClientRect();
+
+          // Guard against non-rendered elements
+          if (pageRect.width === 0 || pageRect.height === 0) return;
+
+          const x = ((linkRect.left - pageRect.left) / pageRect.width) * pdfWidth;
+          const y = ((linkRect.top - pageRect.top) / pageRect.height) * pdfHeight;
+          const w = (linkRect.width / pageRect.width) * pdfWidth;
+          const h = (linkRect.height / pageRect.height) * pdfHeight;
+
+          // Check if it's an internal link starting with '#'
+          if (href.startsWith("#")) {
+            const targetId = href.replace("#", "");
+            const targetPdfPage = pageIdToPdfPageNumber.get(targetId);
+
+            if (targetPdfPage) {
+              doc.link(x, y, w, h, { pageNumber: targetPdfPage });
+            }
+          } else {
+            // Check if it's an external link starting with http://, https://, mailto:, tel:
+            const lowerHref = href.toLowerCase();
+            if (
+              lowerHref.startsWith("http://") ||
+              lowerHref.startsWith("https://") ||
+              lowerHref.startsWith("mailto:") ||
+              lowerHref.startsWith("tel:")
+            ) {
+              doc.link(x, y, w, h, { url: href });
+            }
+          }
+        });
       }
 
       // Format filename using settings.title preserving case and letters, removing accents
