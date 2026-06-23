@@ -185,10 +185,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       }
     });
 
-    if (onContentUpdate) {
-      const markdown = serializeEditorDomToMarkdown();
-      onContentUpdate(markdown);
-    }
+    // Não chamar onContentUpdate aqui.
   }
 
   const execVisualCommand = (command: string, value: string = '') => {
@@ -198,11 +195,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     
     document.execCommand(command, false, value);
     
-    // Auto-save and send update
-    if (onContentUpdate) {
-      const markdown = serializeEditorDomToMarkdown();
-      onContentUpdate(markdown);
-    }
+    // Não chamar onContentUpdate aqui.
+    // O conteúdo será consolidado apenas em "Salvar & Voltar".
   };
 
   // Lock body scroll when fullscreen is active to avoid double scrolling
@@ -1138,11 +1132,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                       sel.removeAllRanges();
                       sel.addRange(newRange);
                       
-                      // Auto-save and reprocess to apply the break immediately
-                      if (onContentUpdate) {
-                         const markdown = serializeEditorDomToMarkdown();
-                         onContentUpdate(markdown);
-                      }
+                      // Não chamar onContentUpdate aqui.
+                      // O conteúdo será consolidado apenas ao salvar.
                     }
                   }} 
                   className="px-3 py-1.5 hover:bg-orange-50 text-[#C9826B] border border-orange-200 rounded-lg flex items-center gap-1.5 text-xs font-bold transition-colors" title="Inserir Quebra de Página Manual">
