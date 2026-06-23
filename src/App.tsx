@@ -4,6 +4,7 @@ import {
   ContentBlock,
   DEFAULT_SETTINGS,
   EbookProject,
+  ContentRevision,
 } from "./types";
 import { parseEbookContent, extractMetadataFromContent } from "./utils/parser";
 import { chunkIntoPages } from "./utils/paginator";
@@ -101,6 +102,15 @@ export default function App() {
   });
   const [blocks, setBlocks] = useState<ContentBlock[]>(() => {
     const saved = localStorage.getItem("ebook_layout_blocks");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [contentRevisions, setContentRevisions] = useState<ContentRevision[]>(() => {
+    const saved = localStorage.getItem("ebook_content_revisions");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -270,6 +280,10 @@ export default function App() {
     localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
   }, [blocks]);
 
+  useEffect(() => {
+    localStorage.setItem("ebook_content_revisions", JSON.stringify(contentRevisions));
+  }, [contentRevisions]);
+
   // Intercept Close/Reload attempts and handle tab visibility to keep PDF export active
   useEffect(() => {
     let wakeLock: any = null;
@@ -318,7 +332,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.70";
+  const buildVersionStr = "v1.4.71";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -597,6 +611,38 @@ export default function App() {
     }
   };
 
+  const createContentRevision = (source: ContentRevision["source"], label?: string) => {
+    if (blocks.length === 0) return;
+
+    const newRevision: ContentRevision = {
+      id: crypto.randomUUID(),
+      label: label || `Revisão de conteúdo`,
+      createdAt: new Date().toLocaleString("pt-BR"),
+      source,
+      settings,
+      blocks: JSON.parse(JSON.stringify(blocks)),
+    };
+
+    setContentRevisions((prev) => [newRevision, ...prev].slice(0, 20));
+  };
+
+  const restoreContentRevision = (revision: ContentRevision) => {
+    if (!confirm(`Restaurar a revisão "${revision.label}" de ${revision.createdAt}? O estado atual será substituído.`)) {
+      return;
+    }
+
+    setSettings(revision.settings);
+    setBlocks(revision.blocks);
+    setReprocessTrigger((prev) => prev + 1);
+    showToast("Revisão de conteúdo restaurada com sucesso!", "success");
+  };
+
+  const deleteContentRevision = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setContentRevisions((prev) => prev.filter((rev) => rev.id !== id));
+    showToast("Revisão de conteúdo excluída.", "success");
+  };
+
   /**
    * handleContentUpdateFromPreview
    * 
@@ -614,12 +660,13 @@ export default function App() {
    * 3. Boxes Sem Bordas Duplicadas: Decoradores visuais como .box-reflexao, .box-informativo e .box-cuidado são
    *    desembrulhados e filtrados de forma a preservar apenas seus textos puros durante a conversão reversa, prevenindo
    *    a anidação de divs internas após salvar sucessivas vezes.
-   * 4. Integridade das Quebras Manuais: Quebras manuais de página permanecem salvas de forma íntegra no formato nativo
+   * 4. Integridade das Quebras Manuais: Quebras manuais de página permanecem salvas de forma integra no formato nativo
    *    como "<!-- page-break -->" ou "[=== QUEBRA DE PÁGINA MANUAL ===]".
    * 5. Sem Degradação de Markdown: A conversão entre HTML renderizado e Markdown obedece a regras restritas do Turndown,
    *    permitindo salvar infinitas vezes o fluxo sem perda de conteúdo ou replicação de estilos.
    */
   const handleContentUpdateFromPreview = (newMarkdown: string) => {
+    createContentRevision("visual-editor", "Antes de salvar edição visual");
     setBlocks((prev) => {
       let mergedBlock = prev.length === 1 && prev[0].filename === "Edições Visuais.md" ? prev[0] : null;
       let newRevisions = [];
@@ -1396,6 +1443,90 @@ export default function App() {
                   ))}
                 </div>
               )}
+
+              {/* SECTION: CONTENT REVISIONS HISTORY */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <History className="text-[#245C5A]" size={20} />
+                    <div>
+                      <h3 className="text-lg font-display font-semibold text-[#2F3437]">
+                        Histórico de Revisões do Conteúdo
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        {contentRevisions.length} {contentRevisions.length === 1 ? "revisão salva" : "revisões salvas"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => createContentRevision("manual", "Revisão manual")}
+                    disabled={blocks.length === 0}
+                    className="bg-[#245C5A] hover:bg-[#1b4342] disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-sm inline-flex items-center gap-1.5 self-start sm:self-center"
+                  >
+                    <Plus size={14} />
+                    Criar revisão agora
+                  </button>
+                </div>
+
+                {contentRevisions.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400 text-sm">
+                    <History className="mx-auto mb-2 opacity-40" size={32} />
+                    Nenhuma revisão do conteúdo foi criada ainda. 
+                    <p className="text-xs text-gray-400 mt-1">
+                      Crie uma revisão manual ou faça edições visuais no preview para salvamentos automáticos.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    {contentRevisions.map((rev) => (
+                      <div 
+                        key={rev.id} 
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-50 hover:bg-gray-100/70 rounded-lg border border-gray-200 transition-colors gap-3"
+                      >
+                        <div className="space-y-1 block text-left">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-sm text-[#2F3437]">
+                              {rev.label}
+                            </span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                              rev.source === 'visual-editor' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : rev.source === 'manual' 
+                                ? 'bg-green-100 text-green-700' 
+                                : rev.source === 'upload' 
+                                ? 'bg-purple-100 text-[#5B21B6]' 
+                                : 'bg-amber-100 text-[#92400E]'
+                            }`}>
+                              {rev.source === 'visual-editor' ? 'Editor Visual' :
+                               rev.source === 'manual' ? 'Revisão Manual' :
+                               rev.source === 'upload' ? 'Upload' : 'Restauração'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Criada em: <span className="font-medium text-gray-700">{rev.createdAt}</span>
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          <button
+                            onClick={() => restoreContentRevision(rev)}
+                            className="px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw size={12} />
+                            Restaurar
+                          </button>
+                          <button
+                            onClick={(e) => deleteContentRevision(rev.id, e)}
+                            className="p-1.5 text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                            title="Excluir"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -61,6 +61,15 @@ export type EbookProject = {
   blocks: ContentBlock[];
 };
 
+export type ContentRevision = {
+  id: string;
+  label: string;
+  createdAt: string;
+  source: 'visual-editor' | 'manual' | 'upload' | 'restore';
+  settings: ProjectSettings;
+  blocks: ContentBlock[];
+};
+
 export const DEFAULT_SETTINGS: ProjectSettings = {
   title: "",
   shortTitle: "",
