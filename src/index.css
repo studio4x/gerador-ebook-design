@@ -168,17 +168,17 @@ h1, h2, h3, h4, h5 {
 }
 
 /* Custom Boxes */
-.page-content {
+.ebook-content {
   /* No changes yet */
 }
 
-.page-content:has(.chapter-opener) {
+.ebook-content:has(.chapter-opener) {
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
-.page-content:has(.chapter-opener) > .chapter-opener {
+.ebook-content:has(.chapter-opener) > .chapter-opener {
   flex-grow: 1;
 }
 

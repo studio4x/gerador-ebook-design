@@ -332,7 +332,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.79";
+  const buildVersionStr = "v1.4.80";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -1105,6 +1105,12 @@ export default function App() {
                 overflow: hidden !important;
                 font-size: ${bodyFontSize} !important;
                 line-height: ${bodyLineHeight} !important;
+              }
+              .ebook-content:has(.chapter-opener) {
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                height: 228mm !important;
               }
               .footer-print {
                 position: absolute !important;
