@@ -163,8 +163,15 @@ export function CloudSync({
       }
 
       const docRef = doc(db, "ebooks", projectId);
-      const docSnap = await getDoc(docRef);
-      const existingData = docSnap.exists() ? docSnap.data() as CloudProject : null;
+      let existingData: CloudProject | null = null;
+      try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          existingData = docSnap.data() as CloudProject;
+        }
+      } catch (err) {
+        console.warn("Nao foi possivel obter o documento existente (pode nao existir ainda):", err);
+      }
       const nextVersion = (existingData?.version || currentProjectVersion || 0) + 1;
 
       await setDoc(docRef, {
