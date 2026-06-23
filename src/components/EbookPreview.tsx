@@ -257,6 +257,131 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return true;
   };
 
+  const repaginateLocalEditors = () => {
+    const htmls: string[] = [];
+    Object.keys(editorRefs.current)
+      .sort((a, b) => Number(a) - Number(b))
+      .forEach((key) => {
+        const ref = editorRefs.current[Number(key)];
+        if (ref) {
+          htmls.push(ref.innerHTML);
+        }
+      });
+    const joinedHtml = htmls.join("\n");
+    const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
+    setLocalContentPages(paginatedPages);
+  };
+
+  const normalizeManualBreaksForClipboard = (html: string): string => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    const breaks = doc.querySelectorAll(".manual-page-break, [data-page-break='true']");
+    breaks.forEach((br) => {
+      const marker = doc.createElement("p");
+      marker.textContent = "[=== QUEBRA DE PÁGINA MANUAL ===]";
+      br.replaceWith(marker);
+    });
+
+    return doc.body.innerHTML;
+  };
+
+  const restoreManualBreaksFromPastedHtml = (html: string): string => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    Array.from(doc.body.querySelectorAll("p, div, span")).forEach((el) => {
+      const text = el.textContent?.trim() || "";
+      if (
+        text === "[=== QUEBRA DE PÁGINA MANUAL ===]" ||
+        text === "<!-- page-break -->"
+      ) {
+        const div = document.createElement("div");
+        div.className = "manual-page-break";
+        div.setAttribute("data-page-break", "true");
+        div.innerHTML = "&nbsp;";
+        div.style.borderTop = "2px dashed #C9826B";
+        div.style.margin = "20px 0";
+        div.style.position = "relative";
+        div.style.display = "block";
+        div.style.width = "100%";
+        div.contentEditable = "false";
+        el.replaceWith(div);
+      }
+    });
+
+    return doc.body.innerHTML;
+  };
+
+  const handleEditorCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    const range = sel.getRangeAt(0);
+    const container = document.createElement("div");
+    container.appendChild(range.cloneContents());
+
+    const normalizedHtml = normalizeManualBreaksForClipboard(container.innerHTML);
+    const plainText = normalizedHtml
+      .replace(/<p>\s*\[=== QUEBRA DE PÁGINA MANUAL ===\]\s*<\/p>/gi, "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n")
+      .replace(/<[^>]+>/g, "")
+      .trim();
+
+    e.clipboardData.setData("text/html", normalizedHtml);
+    e.clipboardData.setData("text/plain", plainText);
+    e.preventDefault();
+  };
+
+  const handleEditorCut = (e: React.ClipboardEvent<HTMLDivElement>, contentIdx: number) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    const range = sel.getRangeAt(0);
+    const container = document.createElement("div");
+    container.appendChild(range.cloneContents());
+
+    const normalizedHtml = normalizeManualBreaksForClipboard(container.innerHTML);
+    const plainText = normalizedHtml
+      .replace(/<p>\s*\[=== QUEBRA DE PÁGINA MANUAL ===\]\s*<\/p>/gi, "\n\n[=== QUEBRA DE PÁGINA MANUAL ===]\n\n")
+      .replace(/<[^>]+>/g, "")
+      .trim();
+
+    e.clipboardData.setData("text/html", normalizedHtml);
+    e.clipboardData.setData("text/plain", plainText);
+
+    visualUndoStackRef.current.push(captureVisualSnapshot());
+    visualRedoStackRef.current = [];
+
+    range.deleteContents();
+    sel.removeAllRanges();
+
+    repaginateLocalEditors();
+
+    e.preventDefault();
+  };
+
+  const handleEditorPaste = (e: React.ClipboardEvent<HTMLDivElement>, contentIdx: number) => {
+    e.preventDefault();
+
+    visualUndoStackRef.current.push(captureVisualSnapshot());
+    visualRedoStackRef.current = [];
+
+    const html = e.clipboardData.getData("text/html");
+    const text = e.clipboardData.getData("text/plain");
+
+    let contentToInsert = html || text.replace(/\n/g, "<br>");
+
+    contentToInsert = contentToInsert
+      .replace(/\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]/gi, '<div class="manual-page-break" data-page-break="true" contenteditable="false">&nbsp;</div>')
+      .replace(/<!--\s*page-break\s*-->/gi, '<div class="manual-page-break" data-page-break="true" contenteditable="false">&nbsp;</div>');
+
+    contentToInsert = restoreManualBreaksFromPastedHtml(contentToInsert);
+
+    document.execCommand("insertHTML", false, contentToInsert);
+
+    repaginateLocalEditors();
+  };
+
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, contentIdx: number) => {
     if (!isEditingVisual) return;
     if (e.key !== "Delete") return;
@@ -307,6 +432,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
 
     setLocalContentPages(paginatedPages);
+    
+    // We already repaginated, but we could have also just called repaginateLocalEditors()
+    // It's ok since this handles current page logic.
   };
 
   // Lock body scroll when fullscreen is active to avoid double scrolling
@@ -1256,20 +1384,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                       sel.removeAllRanges();
                       sel.addRange(newRange);
                       
-                      // Coletar HTML atualizado de todos os editores e repaginar localmente
-                      const htmls: string[] = [];
-                      Object.keys(editorRefs.current)
-                        .sort((a, b) => Number(a) - Number(b))
-                        .forEach((key) => {
-                          const ref = editorRefs.current[Number(key)];
-                          if (ref) {
-                            htmls.push(ref.innerHTML);
-                          }
-                        });
-                      
-                      const joinedHtml = htmls.join('\n');
-                      const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
-                      setLocalContentPages(paginatedPages);
+                      repaginateLocalEditors();
                       
                       // Não chamar onContentUpdate aqui.
                       // O conteúdo será consolidado apenas ao salvar.
@@ -1491,6 +1606,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                 ref={(el) => { editorRefs.current[contentIdx] = el; }}
                                 className={`ebook-content flex-grow ${isEditingVisual ? 'outline-none ring-4 ring-blue-400 ring-inset bg-blue-50/10 rounded overflow-visible' : ''}`}
                                  onKeyDown={(e) => handleEditorKeyDown(e, contentIdx)}
+                                 onCopy={handleEditorCopy}
+                                 onCut={(e) => handleEditorCut(e, contentIdx)}
+                                 onPaste={(e) => handleEditorPaste(e, contentIdx)}
                                 contentEditable={isEditingVisual}
                                 suppressContentEditableWarning={true}
                                 dangerouslySetInnerHTML={{ __html: pageHtml }}
