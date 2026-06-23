@@ -57,6 +57,154 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const editorRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
+  type VisualSnapshot = {
+    htmlByPage: Record<number, string>;
+  };
+
+  const visualUndoStackRef = useRef<VisualSnapshot[]>([]);
+  const visualRedoStackRef = useRef<VisualSnapshot[]>([]);
+
+  function captureVisualSnapshot(): VisualSnapshot {
+    const htmlByPage: Record<number, string> = {};
+    Object.keys(editorRefs.current)
+      .sort((a, b) => Number(a) - Number(b))
+      .forEach((key) => {
+        const ref = editorRefs.current[Number(key)];
+        if (ref) {
+          htmlByPage[Number(key)] = ref.innerHTML;
+        }
+      });
+    return { htmlByPage };
+  }
+
+  function serializeEditorDomToMarkdown(): string {
+     let fullHtml = '';
+     Object.keys(editorRefs.current).sort((a,b) => Number(a) - Number(b)).forEach(key => {
+        const ref = editorRefs.current[Number(key)];
+        if (ref) {
+          const clone = ref.cloneNode(true) as HTMLElement;
+          const breaks = clone.querySelectorAll('.manual-page-break') as NodeListOf<HTMLElement>;
+          breaks.forEach(el => {
+             el.style.borderTop = '';
+             el.style.margin = '';
+             el.style.position = '';
+             el.style.display = '';
+             el.style.width = '';
+             el.innerHTML = 'page-break-placeholder'; // Prevent Turndown from stripping it as a blank node
+          });
+          fullHtml += clone.innerHTML + '\n\n';
+        }
+     });
+
+     const turndownService = new TurndownService({
+         headingStyle: 'atx',
+         bulletListMarker: '-',
+         emDelimiter: '*'
+     });
+     
+     // Custom Turndown rules to unwrap visual decorators safely
+     turndownService.addRule('pagebreaks', {
+         filter: function (node) {
+             return (
+                 node.nodeName === 'DIV' &&
+                 (node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true')
+             );
+         },
+         replacement: function () {
+             return '\n\n<!-- page-break -->\n\n';
+         }
+     });
+
+     turndownService.addRule('chapterOpener', {
+         filter: function (node) {
+             return node.nodeName === 'DIV' && node.classList.contains('chapter-opener');
+         },
+         replacement: function (content, node) {
+             const h1 = node.querySelector('h1');
+             const numDiv = node.querySelector('.chapter-number');
+             const title = h1 ? h1.textContent?.trim() : '';
+             const num = numDiv ? numDiv.textContent?.trim() : '';
+             
+             let headerText = '';
+             if (num && title) {
+                 const cleanNum = num.replace(/^0+/, ''); // "01" -> "1"
+                 headerText = `# Capítulo ${cleanNum}: ${title}`;
+             } else if (title) {
+                 headerText = `# ${title}`;
+             } else {
+                 headerText = `# ${content.trim()}`;
+             }
+             return '\n\n' + headerText + '\n\n';
+         }
+     });
+
+     turndownService.addRule('chapterNumber', {
+         filter: function (node) {
+             return node.nodeName === 'DIV' && node.classList.contains('chapter-number');
+         },
+         replacement: function () {
+             return '';
+         }
+     });
+
+     turndownService.addRule('fraseCentral', {
+         filter: function (node) {
+             return node.nodeName === 'DIV' && node.classList.contains('frase-central');
+         },
+         replacement: function (content) {
+             const trimmed = content.trim();
+             if (!trimmed) return '';
+             const lines = trimmed.split('\n').map(line => `> ${line}`).join('\n');
+             return '\n\n' + lines + '\n\n';
+         }
+     });
+
+     turndownService.addRule('unwrapBoxes', {
+         filter: function (node) {
+             return (
+                 node.nodeName === 'DIV' &&
+                 (node.classList.contains('box-reflexao') || 
+                  node.classList.contains('box-informativo') || 
+                  node.classList.contains('box-cuidado'))
+             );
+         },
+         replacement: function (content) {
+             return '\n\n' + content + '\n\n';
+         }
+     });
+     
+     turndownService.keep(['span', 'u']);
+     return turndownService.turndown(fullHtml);
+  }
+
+  function restoreVisualSnapshot(snapshot: VisualSnapshot) {
+    Object.entries(snapshot.htmlByPage).forEach(([key, html]) => {
+      const ref = editorRefs.current[Number(key)];
+      if (ref) {
+        ref.innerHTML = html;
+      }
+    });
+
+    if (onContentUpdate) {
+      const markdown = serializeEditorDomToMarkdown();
+      onContentUpdate(markdown);
+    }
+  }
+
+  const execVisualCommand = (command: string, value: string = '') => {
+    // Save snapshot of current state before applying formatting
+    visualUndoStackRef.current.push(captureVisualSnapshot());
+    visualRedoStackRef.current = [];
+    
+    document.execCommand(command, false, value);
+    
+    // Auto-save and send update
+    if (onContentUpdate) {
+      const markdown = serializeEditorDomToMarkdown();
+      onContentUpdate(markdown);
+    }
+  };
+
   // Lock body scroll when fullscreen is active to avoid double scrolling
   useEffect(() => {
     if (isFullscreen) {
@@ -891,15 +1039,51 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
          <div className="flex-grow min-w-0 flex flex-col items-center w-full relative">
             {isEditingVisual && (
               <div className={`sticky ${isFullscreen ? 'top-[72px]' : 'top-[132px]'} z-30 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-xl rounded-xl p-2 mb-4 w-full max-w-4xl flex items-center justify-center gap-1.5 transition-all animate-in slide-in-from-top-4`}>
-                <button onClick={() => document.execCommand('undo')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" title="Desfazer"><Undo size={16} /></button>
-                <button onClick={() => document.execCommand('redo')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" title="Refazer"><Redo size={16} /></button>
+                <button 
+                  onClick={() => {
+                    if (visualUndoStackRef.current.length > 0) {
+                      const currentSnapshot = captureVisualSnapshot();
+                      visualRedoStackRef.current.push(currentSnapshot);
+
+                      const previousSnapshot = visualUndoStackRef.current.pop();
+                      if (previousSnapshot) {
+                        restoreVisualSnapshot(previousSnapshot);
+                      }
+                    } else {
+                      document.execCommand('undo');
+                    }
+                  }} 
+                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" 
+                  title="Desfazer"
+                >
+                  <Undo size={16} />
+                </button>
+                <button 
+                  onClick={() => {
+                    if (visualRedoStackRef.current.length > 0) {
+                      const currentSnapshot = captureVisualSnapshot();
+                      visualUndoStackRef.current.push(currentSnapshot);
+
+                      const nextSnapshot = visualRedoStackRef.current.pop();
+                      if (nextSnapshot) {
+                        restoreVisualSnapshot(nextSnapshot);
+                      }
+                    } else {
+                      document.execCommand('redo');
+                    }
+                  }} 
+                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200 cursor-pointer" 
+                  title="Refazer"
+                >
+                  <Redo size={16} />
+                </button>
                 <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                <button onClick={() => document.execCommand('bold')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Negrito"><Bold size={16} /></button>
-                <button onClick={() => document.execCommand('italic')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Itálico"><Italic size={16} /></button>
-                <button onClick={() => document.execCommand('underline')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Sublinhado"><Underline size={16} /></button>
+                <button onClick={() => execVisualCommand('bold')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Negrito"><Bold size={16} /></button>
+                <button onClick={() => execVisualCommand('italic')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Itálico"><Italic size={16} /></button>
+                <button onClick={() => execVisualCommand('underline')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 hover:text-black hover:bg-gray-200" title="Sublinhado"><Underline size={16} /></button>
                 <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                <button onClick={() => document.execCommand('formatBlock', false, 'H1')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 font-bold hover:bg-gray-200" title="Título Principal">H1</button>
-                <button onClick={() => document.execCommand('formatBlock', false, 'H2')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 font-bold hover:bg-gray-200" title="Subtítulo">H2</button>
+                <button onClick={() => execVisualCommand('formatBlock', 'H1')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 font-bold hover:bg-gray-200" title="Título Principal">H1</button>
+                <button onClick={() => execVisualCommand('formatBlock', 'H2')} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700 font-bold hover:bg-gray-200" title="Subtítulo">H2</button>
                 <div className="w-px h-6 bg-gray-200 mx-1"></div>
                 <button 
                   onClick={() => {
@@ -1060,103 +1244,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                 <button
                   onClick={() => {
                     if (!onContentUpdate) return;
-                    
-                    let fullHtml = '';
-                    Object.keys(editorRefs.current).sort((a,b) => Number(a) - Number(b)).forEach(key => {
-                       const ref = editorRefs.current[Number(key)];
-                       if (ref) {
-                         const clone = ref.cloneNode(true) as HTMLElement;
-                         const breaks = clone.querySelectorAll('.manual-page-break') as NodeListOf<HTMLElement>;
-                         breaks.forEach(el => {
-                            el.style.borderTop = '';
-                            el.style.margin = '';
-                            el.style.position = '';
-                            el.style.display = '';
-                            el.style.width = '';
-                            el.innerHTML = 'page-break-placeholder'; // Prevent Turndown from stripping it as a blank node
-                         });
-                         fullHtml += clone.innerHTML + '\n\n';
-                       }
-                    });
-
-                    const turndownService = new TurndownService({
-                        headingStyle: 'atx',
-                        bulletListMarker: '-',
-                        emDelimiter: '*'
-                    });
-                    
-                    turndownService.addRule('pagebreaks', {
-                        filter: function (node) {
-                            return (
-                                node.nodeName === 'DIV' &&
-                                (node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true')
-                            );
-                        },
-                        replacement: function () {
-                            return '\n\n<!-- page-break -->\n\n';
-                        }
-                    });
-
-                    turndownService.addRule('chapterOpener', {
-                        filter: function (node) {
-                            return node.nodeName === 'DIV' && node.classList.contains('chapter-opener');
-                        },
-                        replacement: function (content, node) {
-                            const h1 = node.querySelector('h1');
-                            const numDiv = node.querySelector('.chapter-number');
-                            const title = h1 ? h1.textContent?.trim() : '';
-                            const num = numDiv ? numDiv.textContent?.trim() : '';
-                            
-                            let headerText = '';
-                            if (num && title) {
-                                const cleanNum = num.replace(/^0+/, ''); // "01" -> "1"
-                                headerText = `# Capítulo ${cleanNum}: ${title}`;
-                            } else if (title) {
-                                headerText = `# ${title}`;
-                            } else {
-                                headerText = `# ${content.trim()}`;
-                            }
-                            return '\n\n' + headerText + '\n\n';
-                        }
-                    });
-
-                    turndownService.addRule('chapterNumber', {
-                        filter: function (node) {
-                            return node.nodeName === 'DIV' && node.classList.contains('chapter-number');
-                        },
-                        replacement: function () {
-                            return '';
-                        }
-                    });
-
-                    turndownService.addRule('fraseCentral', {
-                        filter: function (node) {
-                            return node.nodeName === 'DIV' && node.classList.contains('frase-central');
-                        },
-                        replacement: function (content) {
-                            const trimmed = content.trim();
-                            if (!trimmed) return '';
-                            const lines = trimmed.split('\n').map(line => `> ${line}`).join('\n');
-                            return '\n\n' + lines + '\n\n';
-                        }
-                    });
-
-                    turndownService.addRule('unwrapBoxes', {
-                        filter: function (node) {
-                            return (
-                                node.nodeName === 'DIV' &&
-                                (node.classList.contains('box-reflexao') || 
-                                 node.classList.contains('box-informativo') || 
-                                 node.classList.contains('box-cuidado'))
-                            );
-                        },
-                        replacement: function (content) {
-                            return '\n\n' + content + '\n\n';
-                        }
-                    });
-                    
-                    turndownService.keep(['span', 'u']);
-                    const markdown = turndownService.turndown(fullHtml);
+                    const markdown = serializeEditorDomToMarkdown();
                     setIsEditingVisual(false);
                     onContentUpdate(markdown);
                   }}
