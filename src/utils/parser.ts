@@ -37,7 +37,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
   const doc = parser.parseFromString(html, 'text/html');
 
   // Handle chapters and boxes
-  const headings = doc.querySelectorAll('h1, h2, h3, h4');
+  const headings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
   
   headings.forEach((heading) => {
     // Guard against wrapping elements that are already within a chapter-opener or highlighted box
@@ -92,7 +92,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
 
   // Filter out sections that are treated as standalone high-fidelity dedicated pages (Aviso / CTA / Contatos / Sumário)
   // so they are not duplicated in the main flow
-  const allHeadings = doc.querySelectorAll('h1, h2, h3, h4');
+  const allHeadings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
   allHeadings.forEach((heading) => {
     const text = heading.textContent?.toLowerCase() || '';
     if (
@@ -197,7 +197,7 @@ function wrapNextUntilHeading(startElement: Element, className: string) {
         const next: Element | null = current.nextElementSibling;
         const tagName = current.tagName.toLowerCase();
         
-        if (current !== startElement && ['h1', 'h2', 'h3', 'h4', 'h5'].includes(tagName)) {
+        if (current !== startElement && ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
             break;
         }
 
@@ -215,7 +215,7 @@ function removeNextUntilHeading(startElement: Element) {
         const next: Element | null = current.nextElementSibling;
         const tagName = current.tagName.toLowerCase();
         
-        if (current !== startElement && ['h1', 'h2', 'h3', 'h4', 'h5'].includes(tagName)) {
+        if (current !== startElement && ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
             break;
         }
 

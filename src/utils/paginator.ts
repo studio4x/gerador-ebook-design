@@ -32,7 +32,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
       for (let j = currentPageNodes.length - 1; j >= 0; j--) {
         const lastNode = currentPageNodes[j];
         const lastTagName = lastNode.tagName.toLowerCase();
-        const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
+        const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(lastTagName) || lastNode.classList.contains('chapter-opener');
         
         if (isHeading) {
           if (nonHeadingCount < 2) {
@@ -76,7 +76,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
         let cost = textWords;
         if (isBx) {
           const innerParagraphsCount = n.querySelectorAll('p').length;
-          const innerHeadingCount = n.querySelectorAll('h1, h2, h3, h4, h5').length;
+          const innerHeadingCount = n.querySelectorAll('h1, h2, h3, h4, h5, h6').length;
           const innerListItemCount = n.querySelectorAll('li').length;
           const innerListCount = n.querySelectorAll('ul, ol').length;
           cost += 80 + (innerParagraphsCount * 18) + (innerHeadingCount * 30) + (innerListItemCount * 14) + (innerListCount * 10);
@@ -132,7 +132,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     if (isBox) {
       // Boxes have surrounding margins, inner paddings, borders and text
       const innerParagraphsCount = node.querySelectorAll('p').length;
-      const innerHeadingCount = node.querySelectorAll('h1, h2, h3, h4, h5').length;
+      const innerHeadingCount = node.querySelectorAll('h1, h2, h3, h4, h5, h6').length;
       const innerListItemCount = node.querySelectorAll('li').length;
       const innerListCount = node.querySelectorAll('ul, ol').length;
       nodeCost += 80 + (innerParagraphsCount * 18) + (innerHeadingCount * 30) + (innerListItemCount * 14) + (innerListCount * 10);

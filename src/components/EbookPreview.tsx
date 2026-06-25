@@ -664,8 +664,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
         });
       }
 
-      // Also scan this page for other sub-headings (H1, H2, H3), regardless of whether it's a chapter-opener page (excluding the chapter opener title itself)
-      const headings = pageDoc.querySelectorAll('h1, h2, h3');
+      // Also scan this page for other sub-headings (H1, H2, H3, H4, H5, H6), regardless of whether it's a chapter-opener page (excluding the chapter opener title itself)
+      const headings = pageDoc.querySelectorAll('h1, h2, h3, h4, h5, h6');
       headings.forEach((heading) => {
         if (heading.closest('.chapter-opener')) return;
         
@@ -676,7 +676,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
         const text = heading.textContent?.trim() || '';
         // Skip headings that are too long (likely metadata or parser errors like YAML frontmatter being matched)
-        if (text && text.length > 2 && text.length < 150) {
+        if (text && text.length >= 1 && text.length < 150) {
           const tagName = heading.tagName.toLowerCase();
           
           let level = 2;
@@ -688,6 +688,12 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
             level = 2;
           } else if (tagName === 'h3') {
             level = 3;
+          } else if (tagName === 'h4') {
+            level = 4;
+          } else if (tagName === 'h5') {
+            level = 5;
+          } else if (tagName === 'h6') {
+            level = 6;
           }
 
           // Avoid duplicating identical headings on the exact same page
