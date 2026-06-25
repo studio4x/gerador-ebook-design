@@ -677,29 +677,19 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
           let level = 2;
           let isChapter = false;
           
-          const lowerTitle = displayTitle.toLowerCase();
-          if (lowerTitle.includes('fontes consultadas') || lowerTitle.includes('referências bibliográficas')) {
+          if (tagName === 'h1') {
             level = 1;
             isChapter = true;
-            // Remove leading numbers like "13.1 "
-            displayTitle = displayTitle.replace(/^[\d\.\s]+/, '').trim();
-            // Capitalize first letter just in case
-            displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
-          } else {
-            if (tagName === 'h1') {
-              level = 1;
-              isChapter = true;
-            } else if (tagName === 'h2') {
-              level = 2;
-            } else if (tagName === 'h3') {
-              level = 3;
-            } else if (tagName === 'h4') {
-              level = 4;
-            } else if (tagName === 'h5') {
-              level = 5;
-            } else if (tagName === 'h6') {
-              level = 6;
-            }
+          } else if (tagName === 'h2') {
+            level = 2;
+          } else if (tagName === 'h3') {
+            level = 3;
+          } else if (tagName === 'h4') {
+            level = 4;
+          } else if (tagName === 'h5') {
+            level = 5;
+          } else if (tagName === 'h6') {
+            level = 6;
           }
 
           // Avoid duplicating identical headings on the exact same page

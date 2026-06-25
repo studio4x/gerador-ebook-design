@@ -127,9 +127,7 @@ export default function App() {
 
   // Authentication and automated emailing states
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [shouldEmailPdf, setShouldEmailPdf] = useState(true);
   const [shouldEmailEpub, setShouldEmailEpub] = useState(true);
-  const [isSendingPdfEmail, setIsSendingPdfEmail] = useState(false);
   const [isSendingEpubEmail, setIsSendingEpubEmail] = useState(false);
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
 
@@ -332,7 +330,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.85";
+  const buildVersionStr = "v1.4.87";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -749,101 +747,6 @@ export default function App() {
     showToast("Edições visuais salvas no conteúdo com sucesso!", "success");
   };
 
-  const resolveOklchToHsla = (cssText: string): string => {
-    let result = "";
-    let i = 0;
-    const len = cssText.length;
-    
-    while (i < len) {
-      if (cssText.substring(i, i + 6) === "oklch(") {
-        let parenthesisCount = 1;
-        let j = i + 6;
-        while (j < len && parenthesisCount > 0) {
-          if (cssText[j] === "(") {
-            parenthesisCount++;
-         } else if (cssText[j] === ")") {
-            parenthesisCount--;
-          }
-          j++;
-        }
-        
-        const inner = cssText.substring(i + 6, j - 1).trim();
-        
-        if (inner.includes("from ") || inner.includes("var(")) {
-          result += "rgba(128, 128, 128, 0.5)";
-        } else {
-          const normalized = inner.replace(/\s*\/\s*/, " ");
-          const parts = normalized.split(/\s+/).filter(Boolean);
-          if (parts.length >= 3) {
-            let lVal = parseFloat(parts[0]);
-            if (parts[0].includes("%")) {
-              lVal = lVal / 100;
-            }
-            
-            let cVal = parseFloat(parts[1]);
-            if (parts[1].includes("%")) {
-              cVal = cVal / 100;
-            }
-            
-            let hVal = parseFloat(parts[2]);
-            if (isNaN(hVal)) hVal = 0;
-            
-            let alpha = "1";
-            if (parts.length >= 4) {
-              alpha = parts[3].trim();
-            }
-            
-            const lightness = Math.round(lVal * 100);
-            const saturation = Math.min(100, Math.round((cVal / 0.4) * 100));
-            const hue = Math.round(hVal);
-            
-            result += `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
-          } else {
-            result += "rgba(128, 128, 128, 0.5)";
-          }
-        }
-        i = j;
-      } else {
-        result += cssText[i];
-        i++;
-      }
-    }
-    return result;
-  };
-
-  const getOklchFreeStyleString = (): string => {
-    let combinedCss = "";
-    
-    try {
-      for (let i = 0; i < document.styleSheets.length; i++) {
-        const sheet = document.styleSheets[i];
-        try {
-          const rules = sheet.cssRules || sheet.rules;
-          if (rules) {
-            for (let j = 0; j < rules.length; j++) {
-              combinedCss += rules[j].cssText + "\n";
-            }
-          }
-        } catch (e) {
-          // Safe cross-origin block ignore
-        }
-      }
-    } catch (e) {
-      console.warn("Failed reading sheets:", e);
-    }
-
-    try {
-      const styles = document.querySelectorAll("style");
-      styles.forEach((style) => {
-        combinedCss += (style.textContent || "") + "\n";
-      });
-    } catch (e) {
-      console.warn("Failed reading style tags:", e);
-    }
-
-    return resolveOklchToHsla(combinedCss);
-  };
-
   const exportEpub = async () => {
     if (blocks.length === 0) {
       showToast("Nenhum conteúdo para exportar. Por favor, adicione capítulos primeiro.", "error");
@@ -949,356 +852,12 @@ export default function App() {
       return;
     }
 
-    setIsExportingPdf(true);
-    showToast("Gerando PDF direto de alta fidelidade... Aguarde um momento.", "info");
+    showToast("A impressão nativa foi ativada. Selecione 'Salvar como PDF' na janela do sistema para exportar o e-book com texto selecionável e links ativos.", "info");
 
-    try {
-      const { jsPDF } = await import("jspdf");
-      const html2canvas = (await import("html2canvas")).default;
-
-      // Calculate active layout values based on densityMode to feed static styles to html2canvas,
-      // bypassing css custom properties engine which fails in html2canvas
-      let bodyFontSize = '11.5pt';
-      let bodyLineHeight = '1.5';
-      let h1FontSize = '2.3rem';
-      let h2FontSize = '1.6rem';
-      let paraMargin = '1.1rem';
-      
-      if (settings.densityMode === 'compact') {
-        bodyFontSize = '10pt';
-        bodyLineHeight = '1.35';
-        h1FontSize = '1.8rem';
-        h2FontSize = '1.3rem';
-        paraMargin = '0.7rem';
-      } else if (settings.densityMode === 'premium') {
-        bodyFontSize = '12.5pt';
-        bodyLineHeight = '1.6';
-        h1FontSize = '2.6rem';
-        h2FontSize = '1.8rem';
-        paraMargin = '1.4rem';
-      }
-
-      const primaryColor = settings.primaryColor || '#245C5A';
-      const secondaryColor = settings.secondaryColor || '#C9826B';
-      const accentColor = settings.accentColor || '#6F8F9A';
-      const bgColor = settings.backgroundColor || '#FAF8F4';
-      const fontFamily = settings.fontFamily ? `${settings.fontFamily}, sans-serif` : 'Inter, sans-serif';
-      const fontDisplay = settings.fontDisplay ? `${settings.fontDisplay}, sans-serif` : 'Poppins, sans-serif';
-
-      // Pre-extract stylesheet rules as oklch-free standard CSS to prevent CORS and OKLCH rendering crashes
-      const cleanCss = getOklchFreeStyleString();
-
-      // Find all `.page` elements in the exclusive offscreen render container
-      let container = document.getElementById("pdf-render-offscreen");
-      if (!container) {
-        // Fallback to searching the main preview if offscreen container isn't in DOM yet
-        container = document.querySelector(".ebook-preview-container") as HTMLElement;
-      }
-
-      if (!container) {
-        throw new Error("Contêiner de visualização não encontrado.");
-      }
-
-      const pages = container.querySelectorAll(".page");
-      if (pages.length === 0) {
-        throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
-      }
-
-      // Map page element IDs to their final PDF page number (1-based index)
-      const pageIdToPdfPageNumber = new Map<string, number>();
-      pages.forEach((page, index) => {
-        const id = (page as HTMLElement).id;
-        if (id) {
-          pageIdToPdfPageNumber.set(id, index + 1);
-        }
-      });
-
-      // Initialize A4 Portrait PDF: 210mm x 297mm
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: true,
-      });
-
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-
-      for (let i = 0; i < pages.length; i++) {
-        const pageEl = pages[i] as HTMLElement;
-        
-        // Show progress toast
-        if (pages.length > 2) {
-          showToast(`Exportando página ${i + 1} de ${pages.length}...`, "info");
-        }
-
-        const canvas = await html2canvas(pageEl, {
-          scale: 2, // high quality
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
-          backgroundColor: settings.backgroundColor || "#FAF8F4",
-          windowWidth: 794,  // 210mm in pixels at 96 DPI
-          scrollX: 0,
-          scrollY: 0,
-          onclone: (clonedDoc) => {
-            // 1. Reset offscreen container to static relative layout to allow html2canvas to compute coordinates beautifully
-            const clonedOffscreen = clonedDoc.getElementById("pdf-render-offscreen");
-            if (clonedOffscreen) {
-              clonedOffscreen.style.position = "static";
-              clonedOffscreen.style.left = "0";
-              clonedOffscreen.style.top = "0";
-              clonedOffscreen.style.margin = "0";
-              clonedOffscreen.style.width = "210mm";
-              clonedOffscreen.style.height = "auto";
-              clonedOffscreen.style.overflow = "visible";
-              clonedOffscreen.style.opacity = "1";
-            }
-
-            // 2. Remove conflicting CSS links and style tag blocks to prevent color parsing errors in html2canvas
-            const styledLinks = clonedDoc.querySelectorAll("link[rel='stylesheet'], style");
-            styledLinks.forEach((el) => {
-              if (el.tagName.toLowerCase() === "link") {
-                const href = el.getAttribute("href") || "";
-                if (!href.includes("fonts.googleapis.com") && !href.includes("fonts.gstatic.com")) {
-                  el.remove();
-                }
-              } else {
-                el.remove();
-              }
-            });
-
-            // 3. Inject our oklch-free inline css string alongside critical block layout overrides for html2canvas compatibility
-            const layoutOverrides = `
-              :root, .page, .ebook-preview-container {
-                --color-brand-petroleo: ${primaryColor} !important;
-                --color-brand-terracota: ${secondaryColor} !important;
-                --color-brand-azul: ${accentColor} !important;
-                --color-brand-areia: ${bgColor} !important;
-                --color-brand-offwhite: ${bgColor} !important;
-                --font-sans: ${fontFamily} !important;
-                --font-display: ${fontDisplay} !important;
-                --ebook-body-size: ${bodyFontSize} !important;
-                --ebook-line-height: ${bodyLineHeight} !important;
-                --ebook-h1-size: ${h1FontSize} !important;
-                --ebook-h2-size: ${h2FontSize} !important;
-                --ebook-para-margin: ${paraMargin} !important;
-              }
-              .page {
-                display: block !important;
-                position: relative !important;
-                width: 210mm !important;
-                height: 297mm !important;
-                max-height: 297mm !important;
-                box-sizing: border-box !important;
-                padding: 25mm 20mm !important;
-                overflow: hidden !important;
-                background-color: ${bgColor} !important;
-                font-family: ${fontFamily} !important;
-                line-height: ${bodyLineHeight} !important;
-              }
-              .ebook-content {
-                display: block !important;
-                width: 100% !important;
-                height: auto !important;
-                max-height: 228mm !important;
-                overflow: hidden !important;
-                font-size: ${bodyFontSize} !important;
-                line-height: ${bodyLineHeight} !important;
-              }
-              .ebook-content:has(.chapter-opener) {
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: center !important;
-                height: 228mm !important;
-              }
-              .footer-print {
-                position: absolute !important;
-                bottom: 25mm !important;
-                left: 20mm !important;
-                width: 170mm !important;
-                margin-top: 0 !important;
-                box-sizing: border-box !important;
-              }
-              .header-print {
-                display: block !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-              }
-              /* Avoid any text lines or character metrics cuts inside content items */
-              .ebook-content h1 {
-                font-size: ${h1FontSize} !important;
-                line-height: 1.25 !important;
-                margin-bottom: ${paraMargin} !important;
-                font-family: ${fontDisplay} !important;
-                color: ${primaryColor} !important;
-              }
-              .ebook-content h2 {
-                font-size: ${h2FontSize} !important;
-                line-height: 1.3 !important;
-                margin-bottom: calc(${paraMargin} * 0.8) !important;
-                font-family: ${fontDisplay} !important;
-                color: ${primaryColor} !important;
-              }
-              .ebook-content h3 {
-                font-size: calc(${h2FontSize} * 0.8) !important;
-                line-height: 1.3 !important;
-                margin-bottom: calc(${paraMargin} * 0.6) !important;
-                font-family: ${fontDisplay} !important;
-                color: ${accentColor} !important;
-              }
-              .ebook-content p, .ebook-content li {
-                font-size: ${bodyFontSize} !important;
-                line-height: ${bodyLineHeight} !important;
-                margin-bottom: ${paraMargin} !important;
-                vertical-align: top !important;
-              }
-              /* Ensure boxes style properly inside pdf rendering flow */
-              .box-reflexao {
-                background-color: ${bgColor} !important;
-                border: 1px solid var(--color-brand-linha) !important;
-                padding: 1.5rem !important;
-                border-radius: 8px !important;
-                margin: 1.5rem 0 !important;
-              }
-              .box-informativo {
-                background-color: var(--color-brand-informativo) !important;
-                padding: 1.5rem !important;
-                border-radius: 8px !important;
-                margin: 1.5rem 0 !important;
-              }
-              .box-cuidado {
-                background-color: var(--color-brand-cuidado) !important;
-                padding: 1.5rem !important;
-                border-radius: 8px !important;
-                margin: 1.5rem 0 !important;
-              }
-            `;
-            const styleEl = clonedDoc.createElement("style");
-            styleEl.textContent = cleanCss + "\n" + layoutOverrides;
-            clonedDoc.head.appendChild(styleEl);
-
-            // 4. Clean any remaining inline oklch attributes inside elements for ultimate fallback
-            clonedDoc.querySelectorAll("[style]").forEach((el) => {
-              const elHtml = el as HTMLElement;
-              let inlineStyle = elHtml.getAttribute("style") || "";
-              if (inlineStyle.includes("oklch")) {
-                elHtml.setAttribute("style", resolveOklchToHsla(inlineStyle));
-              }
-            });
-          }
-        });
-
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-
-        if (i > 0) {
-          doc.addPage();
-        }
-
-        // Add to page
-        doc.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
-
-        // Detect internal and external links present on this page element and add clickable annotations to the PDF
-        const linksOnPage = Array.from(pageEl.querySelectorAll<HTMLAnchorElement>('a[href]'));
-
-        linksOnPage.forEach((link) => {
-          const href = link.getAttribute("href");
-          if (!href) return;
-
-          const linkRect = link.getBoundingClientRect();
-          const pageRect = pageEl.getBoundingClientRect();
-
-          // Guard against non-rendered elements
-          if (pageRect.width === 0 || pageRect.height === 0) return;
-
-          const x = ((linkRect.left - pageRect.left) / pageRect.width) * pdfWidth;
-          const y = ((linkRect.top - pageRect.top) / pageRect.height) * pdfHeight;
-          const w = (linkRect.width / pageRect.width) * pdfWidth;
-          const h = (linkRect.height / pageRect.height) * pdfHeight;
-
-          // Check if it's an internal link starting with '#'
-          if (href.startsWith("#")) {
-            const targetId = href.replace("#", "");
-            const targetPdfPage = pageIdToPdfPageNumber.get(targetId);
-
-            if (targetPdfPage) {
-              doc.link(x, y, w, h, { pageNumber: targetPdfPage });
-            }
-          } else {
-            // Check if it's an external link starting with http://, https://, mailto:, tel:
-            const lowerHref = href.toLowerCase();
-            if (
-              lowerHref.startsWith("http://") ||
-              lowerHref.startsWith("https://") ||
-              lowerHref.startsWith("mailto:") ||
-              lowerHref.startsWith("tel:")
-            ) {
-              doc.link(x, y, w, h, { url: href });
-            }
-          }
-        });
-      }
-
-      // Format filename using settings.title preserving case and letters, removing accents
-      const rawTitle = settings.title || "Ebook";
-      
-      const removeAccents = (str: string): string => {
-        return str
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/[çÇ]/g, (match) => match === 'ç' ? 'c' : 'C');
-      };
-
-      const sanitizeFilename = (title: string): string => {
-        const base = removeAccents(title);
-        // Remove illegal filesystem characters
-        return base
-          .replace(/[\\\/:\*\?"<>|]/g, "")
-          .trim();
-      };
-
-      const baseFilename = sanitizeFilename(rawTitle) || "Ebook";
-
-      // Track export version in localStorage based on core base name (case-insensitive key)
-      const storageKey = `ebook_export_version_${baseFilename.toLowerCase()}`;
-      const currentVersionStr = localStorage.getItem(storageKey);
-      const version = currentVersionStr ? parseInt(currentVersionStr, 10) : 1;
-
-      // Update version count for next time
-      localStorage.setItem(storageKey, String(version + 1));
-
-      const pdfFileName = `${baseFilename}_v${version}.pdf`;
-      doc.save(pdfFileName);
-      showToast("PDF gerado com sucesso para download!", "success");
-
-      // Auto-email copy to logged-in user if selected
-      if (user && user.email && shouldEmailPdf) {
-        setIsSendingPdfEmail(true);
-        showToast("Enviando PDF para seu e-mail...", "info");
-        try {
-          const pdfBlob = doc.output("blob");
-          await sendEmailAttachment({
-            to: user.email,
-            fileName: pdfFileName,
-            fileBlob: pdfBlob,
-            contentType: "application/pdf",
-            subject: `Seu E-book em PDF: ${rawTitle}`,
-            body: `Olá!\n\nSeu E-book "${rawTitle}" foi gerado com sucesso pelo aplicativo Gerador de E-books e segue em anexo como arquivo PDF de alta fidelidade.\n\nAtenciosamente,\nEquipe de Suporte`
-          });
-          showToast("PDF enviado com sucesso para seu e-mail!", "success");
-        } catch (mailErr: any) {
-          console.error("Erro ao enviar e-mail with PDF:", mailErr);
-          showToast(`PDF baixado com sucesso, mas o envio por e-mail falhou: ${mailErr.message || mailErr}`, "error");
-        } finally {
-          setIsSendingPdfEmail(false);
-        }
-      }
-    } catch (err: any) {
-      console.error(err);
-      showToast(`Ocorreu um erro ao exportar: ${err.message || err}`, "error");
-    } finally {
-      setIsExportingPdf(false);
-    }
+    // Give toast some time to appear before freezing UI with print dialog
+    setTimeout(() => {
+      window.print();
+    }, 1500);
   };
 
   return (
@@ -1847,18 +1406,9 @@ export default function App() {
                     <div className="space-y-3 animate-in fade-in duration-200">
                       <p className="text-xs text-gray-700 leading-relaxed">
                         Detectamos que você está logado como <strong className="text-[#245C5A]">{user.email}</strong>. 
-                        Durante a geração, além do download automático, enviaremos os anexos diretamente para sua caixa de entrada.
+                        Durante a geração de EPUB, enviaremos o anexo diretamente para sua caixa de entrada. A exportação em PDF é gerada diretamente pelo seu navegador.
                       </p>
                       <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
-                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-800 hover:text-[#245C5A] select-none">
-                          <input
-                            type="checkbox"
-                            checked={shouldEmailPdf}
-                            onChange={(e) => setShouldEmailPdf(e.target.checked)}
-                            className="rounded border-gray-400 text-[#245C5A] focus:ring-[#245C5A] h-4 w-4 bg-white"
-                          />
-                          <span>Enviar cópia em PDF</span>
-                        </label>
                         <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-800 hover:text-blue-700 select-none">
                           <input
                             type="checkbox"
@@ -1932,7 +1482,7 @@ export default function App() {
                     {isExportingPdf ? (
                       <>
                         <RefreshCw size={20} className="mr-2 animate-spin" />
-                        {isSendingPdfEmail ? "Enviando PDF..." : "Gerando PDF..."}
+                        {isExportingPdf ? "Gerando PDF..." : "Exportar para PDF"}
                       </>
                     ) : (
                       <>
@@ -1987,26 +1537,6 @@ export default function App() {
         className={`${activeTab === "preview" ? "block" : "hidden print:block"}`}
       >
         <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} onContentUpdate={handleContentUpdateFromPreview} />
-      </div>
-
-      {/* Container invisível exclusivo para renderização e exportação direta de PDF */}
-      <div
-        id="pdf-render-offscreen"
-        className="no-print"
-        style={{
-          position: "fixed",
-          top: "0px",
-          left: "0px",
-          width: "210mm",
-          height: "auto",
-          overflow: "visible",
-          opacity: 0.001,
-          zIndex: -9999,
-          pointerEvents: "none",
-        }}
-        aria-hidden="true"
-      >
-        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} isPrintMode={true} />
       </div>
 
       {/* GLOBAL NOTIFICATION TOAST */}

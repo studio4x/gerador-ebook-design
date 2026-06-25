@@ -88,11 +88,6 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
             heading.parentNode?.replaceChild(opener, heading);
         }
     }
-    // FONTES CONSULTADAS -> remove leading numbers to make it a standalone section
-    else if (text.includes('fontes consultadas') || text.includes('referências bibliográficas')) {
-        const cleanTitle = originalText.replace(/^[\d\.\s]+/, '').trim();
-        heading.textContent = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
-    }
   });
 
   // Filter out sections that are treated as standalone high-fidelity dedicated pages (Aviso / CTA / Contatos / Sumário)
