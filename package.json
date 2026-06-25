@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && npx puppeteer browsers install chrome",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
@@ -18,8 +18,8 @@
     "autoprefixer": "^10.4.21",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
-    "esbuild": "^0.25.0",
     "epub-gen-memory": "^1.1.2",
+    "esbuild": "^0.25.0",
     "express": "^4.21.2",
     "firebase": "^12.15.0",
     "html2canvas": "^1.4.1",
@@ -29,6 +29,7 @@
     "marked": "^18.0.5",
     "motion": "^12.23.24",
     "nodemailer": "^9.0.1",
+    "puppeteer": "^25.2.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",

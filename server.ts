@@ -21,8 +21,49 @@ async function startServer() {
     }
 
     try {
+      // Locate chrome binary dynamically inside .cache or typical directories
+      let executablePath: string | undefined = undefined;
+      const fs = await import("fs");
+      
+      const searchChrome = (dir: string): string | null => {
+        try {
+          if (!fs.existsSync(dir)) return null;
+          const files = fs.readdirSync(dir);
+          for (const file of files) {
+            const fullPath = path.join(dir, file);
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+              const found = searchChrome(fullPath);
+              if (found) return found;
+            } else if (file === "chrome" || file === "chromium") {
+              return fullPath;
+            }
+          }
+        } catch (e) {
+          // ignore directory read errors
+        }
+        return null;
+      };
+
+      const possibleRoots = [
+        path.join(process.cwd(), ".cache/puppeteer"),
+        "/.cache/puppeteer",
+        "/root/.cache/puppeteer",
+        "/www-data-home/.cache/puppeteer"
+      ];
+
+      for (const root of possibleRoots) {
+        const found = searchChrome(root);
+        if (found) {
+          executablePath = found;
+          console.log("Puppeteer: Found Chrome executable at:", executablePath);
+          break;
+        }
+      }
+
       const browser = await puppeteer.launch({
         headless: true,
+        executablePath,
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
