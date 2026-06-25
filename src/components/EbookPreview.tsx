@@ -668,11 +668,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       const headings = pageDoc.querySelectorAll('h1, h2, h3, h4, h5, h6');
       headings.forEach((heading) => {
         if (heading.closest('.chapter-opener')) return;
-        
-        const isExcluded = heading.closest('.box-reflexao') || 
-                           heading.closest('.box-cuidado') || 
-                           heading.closest('.box-informativo');
-        if (isExcluded) return;
 
         const text = heading.textContent?.trim() || '';
         // Skip headings that are too long (likely metadata or parser errors like YAML frontmatter being matched)
