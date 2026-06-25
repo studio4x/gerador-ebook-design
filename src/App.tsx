@@ -330,7 +330,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.87";
+  const buildVersionStr = "v1.4.88";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -747,6 +747,101 @@ export default function App() {
     showToast("Edições visuais salvas no conteúdo com sucesso!", "success");
   };
 
+  const resolveOklchToHsla = (cssText: string): string => {
+    let result = "";
+    let i = 0;
+    const len = cssText.length;
+    
+    while (i < len) {
+      if (cssText.substring(i, i + 6) === "oklch(") {
+        let parenthesisCount = 1;
+        let j = i + 6;
+        while (j < len && parenthesisCount > 0) {
+          if (cssText[j] === "(") {
+            parenthesisCount++;
+         } else if (cssText[j] === ")") {
+            parenthesisCount--;
+          }
+          j++;
+        }
+        
+        const inner = cssText.substring(i + 6, j - 1).trim();
+        
+        if (inner.includes("from ") || inner.includes("var(")) {
+          result += "rgba(128, 128, 128, 0.5)";
+        } else {
+          const normalized = inner.replace(/\s*\/\s*/, " ");
+          const parts = normalized.split(/\s+/).filter(Boolean);
+          if (parts.length >= 3) {
+            let lVal = parseFloat(parts[0]);
+            if (parts[0].includes("%")) {
+              lVal = lVal / 100;
+            }
+            
+            let cVal = parseFloat(parts[1]);
+            if (parts[1].includes("%")) {
+              cVal = cVal / 100;
+            }
+            
+            let hVal = parseFloat(parts[2]);
+            if (isNaN(hVal)) hVal = 0;
+            
+            let alpha = "1";
+            if (parts.length >= 4) {
+              alpha = parts[3].trim();
+            }
+            
+            const lightness = Math.round(lVal * 100);
+            const saturation = Math.min(100, Math.round((cVal / 0.4) * 100));
+            const hue = Math.round(hVal);
+            
+            result += `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+          } else {
+            result += "rgba(128, 128, 128, 0.5)";
+          }
+        }
+        i = j;
+      } else {
+        result += cssText[i];
+        i++;
+      }
+    }
+    return result;
+  };
+
+  const getOklchFreeStyleString = (): string => {
+    let combinedCss = "";
+    
+    try {
+      for (let i = 0; i < document.styleSheets.length; i++) {
+        const sheet = document.styleSheets[i];
+        try {
+          const rules = sheet.cssRules || sheet.rules;
+          if (rules) {
+            for (let j = 0; j < rules.length; j++) {
+              combinedCss += rules[j].cssText + "\n";
+            }
+          }
+        } catch (e) {
+          // Safe cross-origin block ignore
+        }
+      }
+    } catch (e) {
+      console.warn("Failed reading sheets:", e);
+    }
+
+    try {
+      const styles = document.querySelectorAll("style");
+      styles.forEach((style) => {
+        combinedCss += (style.textContent || "") + "\n";
+      });
+    } catch (e) {
+      console.warn("Failed reading style tags:", e);
+    }
+
+    return resolveOklchToHsla(combinedCss);
+  };
+
   const exportEpub = async () => {
     if (blocks.length === 0) {
       showToast("Nenhum conteúdo para exportar. Por favor, adicione capítulos primeiro.", "error");
@@ -852,12 +947,368 @@ export default function App() {
       return;
     }
 
-    showToast("A impressão nativa foi ativada. Selecione 'Salvar como PDF' na janela do sistema para exportar o e-book com texto selecionável e links ativos.", "info");
+    setIsExportingPdf(true);
+    showToast("Gerando PDF direto de alta fidelidade... Aguarde um momento.", "info");
 
-    // Give toast some time to appear before freezing UI with print dialog
-    setTimeout(() => {
-      window.print();
-    }, 1500);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const html2canvas = (await import("html2canvas")).default;
+
+      // Calculate active layout values based on densityMode to feed static styles to html2canvas
+      let bodyFontSize = '11.5pt';
+      let bodyLineHeight = '1.5';
+      let h1FontSize = '2.3rem';
+      let h2FontSize = '1.6rem';
+      let paraMargin = '1.1rem';
+      
+      if (settings.densityMode === 'compact') {
+        bodyFontSize = '10pt';
+        bodyLineHeight = '1.35';
+        h1FontSize = '1.8rem';
+        h2FontSize = '1.3rem';
+        paraMargin = '0.7rem';
+      } else if (settings.densityMode === 'premium') {
+        bodyFontSize = '12.5pt';
+        bodyLineHeight = '1.6';
+        h1FontSize = '2.6rem';
+        h2FontSize = '1.8rem';
+        paraMargin = '1.4rem';
+      }
+
+      const primaryColor = settings.primaryColor || '#245C5A';
+      const secondaryColor = settings.secondaryColor || '#C9826B';
+      const accentColor = settings.accentColor || '#6F8F9A';
+      const bgColor = settings.backgroundColor || '#FAF8F4';
+      const fontFamily = settings.fontFamily ? `${settings.fontFamily}, sans-serif` : 'Inter, sans-serif';
+      const fontDisplay = settings.fontDisplay ? `${settings.fontDisplay}, sans-serif` : 'Poppins, sans-serif';
+
+      const cleanCss = getOklchFreeStyleString();
+
+      let container = document.getElementById("pdf-render-offscreen");
+      if (!container) {
+        container = document.querySelector(".ebook-preview-container") as HTMLElement;
+      }
+
+      if (!container) {
+        throw new Error("Contêiner de visualização não encontrado.");
+      }
+
+      const pages = container.querySelectorAll(".page");
+      if (pages.length === 0) {
+        throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
+      }
+
+      const pageIdToPdfPageNumber = new Map<string, number>();
+      pages.forEach((page, index) => {
+        const id = (page as HTMLElement).id;
+        if (id) {
+          pageIdToPdfPageNumber.set(id, index + 1);
+        }
+      });
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      for (let i = 0; i < pages.length; i++) {
+        const pageEl = pages[i] as HTMLElement;
+        
+        if (pages.length > 2) {
+          showToast(`Exportando página ${i + 1} de ${pages.length}...`, "info");
+        }
+
+        const canvas = await html2canvas(pageEl, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          allowTaint: true,
+          backgroundColor: settings.backgroundColor || "#FAF8F4",
+          windowWidth: 794,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDoc) => {
+            const clonedOffscreen = clonedDoc.getElementById("pdf-render-offscreen");
+            if (clonedOffscreen) {
+              clonedOffscreen.style.position = "static";
+              clonedOffscreen.style.left = "0";
+              clonedOffscreen.style.top = "0";
+              clonedOffscreen.style.margin = "0";
+              clonedOffscreen.style.width = "210mm";
+              clonedOffscreen.style.height = "auto";
+              clonedOffscreen.style.overflow = "visible";
+              clonedOffscreen.style.opacity = "1";
+            }
+
+            const styledLinks = clonedDoc.querySelectorAll("link[rel='stylesheet'], style");
+            styledLinks.forEach((el) => {
+              if (el.tagName.toLowerCase() === "link") {
+                const href = el.getAttribute("href") || "";
+                if (!href.includes("fonts.googleapis.com") && !href.includes("fonts.gstatic.com")) {
+                  el.remove();
+                }
+              } else {
+                el.remove();
+              }
+            });
+
+            const layoutOverrides = `
+              :root, .page, .ebook-preview-container {
+                --color-brand-petroleo: ${primaryColor} !important;
+                --color-brand-terracota: ${secondaryColor} !important;
+                --color-brand-azul: ${accentColor} !important;
+                --color-brand-areia: ${bgColor} !important;
+                --color-brand-offwhite: ${bgColor} !important;
+                --font-sans: ${fontFamily} !important;
+                --font-display: ${fontDisplay} !important;
+                --ebook-body-size: ${bodyFontSize} !important;
+                --ebook-line-height: ${bodyLineHeight} !important;
+                --ebook-h1-size: ${h1FontSize} !important;
+                --ebook-h2-size: ${h2FontSize} !important;
+                --ebook-para-margin: ${paraMargin} !important;
+              }
+              .page {
+                display: block !important;
+                position: relative !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                max-height: 297mm !important;
+                box-sizing: border-box !important;
+                padding: 25mm 20mm !important;
+                overflow: hidden !important;
+                background-color: ${bgColor} !important;
+                font-family: ${fontFamily} !important;
+                line-height: ${bodyLineHeight} !important;
+              }
+              .ebook-content {
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: 228mm !important;
+                overflow: hidden !important;
+                font-size: ${bodyFontSize} !important;
+                line-height: ${bodyLineHeight} !important;
+              }
+              .ebook-content:has(.chapter-opener) {
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                height: 228mm !important;
+              }
+              .footer-print {
+                position: absolute !important;
+                bottom: 25mm !important;
+                left: 20mm !important;
+                width: 170mm !important;
+                margin-top: 0 !important;
+                box-sizing: border-box !important;
+              }
+              .header-print {
+                display: block !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+              }
+              .ebook-content h1 {
+                font-size: ${h1FontSize} !important;
+                line-height: 1.25 !important;
+                margin-bottom: ${paraMargin} !important;
+                font-family: ${fontDisplay} !important;
+                color: ${primaryColor} !important;
+              }
+              .ebook-content h2 {
+                font-size: ${h2FontSize} !important;
+                line-height: 1.3 !important;
+                margin-bottom: calc(${paraMargin} * 0.8) !important;
+                font-family: ${fontDisplay} !important;
+                color: ${primaryColor} !important;
+              }
+              .ebook-content h3 {
+                font-size: calc(${h2FontSize} * 0.8) !important;
+                line-height: 1.3 !important;
+                margin-bottom: calc(${paraMargin} * 0.6) !important;
+                font-family: ${fontDisplay} !important;
+                color: ${accentColor} !important;
+              }
+              .ebook-content p, .ebook-content li {
+                font-size: ${bodyFontSize} !important;
+                line-height: ${bodyLineHeight} !important;
+                margin-bottom: ${paraMargin} !important;
+                vertical-align: top !important;
+              }
+              .box-reflexao {
+                background-color: ${bgColor} !important;
+                border: 1px solid var(--color-brand-linha) !important;
+                padding: 1.5rem !important;
+                border-radius: 8px !important;
+                margin: 1.5rem 0 !important;
+              }
+              .box-informativo {
+                background-color: var(--color-brand-informativo) !important;
+                padding: 1.5rem !important;
+                border-radius: 8px !important;
+                margin: 1.5rem 0 !important;
+              }
+              .box-cuidado {
+                background-color: var(--color-brand-cuidado) !important;
+                padding: 1.5rem !important;
+                border-radius: 8px !important;
+                margin: 1.5rem 0 !important;
+              }
+            `;
+            const styleEl = clonedDoc.createElement("style");
+            styleEl.textContent = cleanCss + "\n" + layoutOverrides;
+            clonedDoc.head.appendChild(styleEl);
+
+            clonedDoc.querySelectorAll("[style]").forEach((el) => {
+              const elHtml = el as HTMLElement;
+              let inlineStyle = elHtml.getAttribute("style") || "";
+              if (inlineStyle.includes("oklch")) {
+                elHtml.setAttribute("style", resolveOklchToHsla(inlineStyle));
+              }
+            });
+          }
+        });
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+        if (i > 0) {
+          doc.addPage();
+        }
+
+        doc.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+
+        // --- Adiciona texto invisível para permitir seleção (OCR-like) ---
+        try {
+          const GState = (doc as any).GState;
+          if (GState) {
+            doc.setGState(new GState({ opacity: 0 }));
+          } else {
+            doc.setTextColor(255, 255, 255);
+          }
+          
+          const pageRect = pageEl.getBoundingClientRect();
+          const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_TEXT, null);
+          let node;
+          while ((node = walker.nextNode())) {
+            const text = node.nodeValue?.trim();
+            if (!text) continue;
+            
+            const parentEl = node.parentElement;
+            if (!parentEl) continue;
+            
+            const tag = parentEl.tagName.toLowerCase();
+            if (tag === 'script' || tag === 'style') continue;
+            
+            const style = window.getComputedStyle(parentEl);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+            
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const rects = range.getClientRects();
+            if (rects.length === 0) continue;
+            
+            const fontSizePx = parseFloat(style.fontSize);
+            const fontSizeMm = (fontSizePx / pageRect.width) * pdfWidth;
+            // PDF usa pontos para fonte. 1 mm = 2.83465 pt.
+            const fontSizePt = fontSizeMm * 2.83465;
+            
+            doc.setFontSize(fontSizePt);
+            
+            const rect = rects[0];
+            const x = ((rect.left - pageRect.left) / pageRect.width) * pdfWidth;
+            const y = ((rect.top - pageRect.top) / pageRect.height) * pdfHeight;
+            const h = (rect.height / pageRect.height) * pdfHeight;
+            const w = (rect.width / pageRect.width) * pdfWidth;
+            
+            // Baseline aproximada
+            const baselineYMm = y + (h * 0.75);
+            
+            doc.text(text, x, baselineYMm, { maxWidth: w * 1.5 });
+          }
+          
+          if (GState) {
+            doc.setGState(new GState({ opacity: 1 }));
+          }
+        } catch (e) {
+          console.warn("Falha ao sobrepor texto selecionável:", e);
+        }
+        // --- Fim da sobreposição de texto ---
+
+        const linksOnPage = Array.from(pageEl.querySelectorAll<HTMLAnchorElement>('a[href]'));
+        linksOnPage.forEach((link) => {
+          const href = link.getAttribute("href");
+          if (!href) return;
+
+          const linkRect = link.getBoundingClientRect();
+          const pageRect = pageEl.getBoundingClientRect();
+
+          if (pageRect.width === 0 || pageRect.height === 0) return;
+
+          const x = ((linkRect.left - pageRect.left) / pageRect.width) * pdfWidth;
+          const y = ((linkRect.top - pageRect.top) / pageRect.height) * pdfHeight;
+          const w = (linkRect.width / pageRect.width) * pdfWidth;
+          const h = (linkRect.height / pageRect.height) * pdfHeight;
+
+          if (href.startsWith("#")) {
+            const targetId = href.replace("#", "");
+            const targetPdfPage = pageIdToPdfPageNumber.get(targetId);
+
+            if (targetPdfPage) {
+              doc.link(x, y, w, h, { pageNumber: targetPdfPage });
+            }
+          } else {
+            const lowerHref = href.toLowerCase();
+            if (
+              lowerHref.startsWith("http://") ||
+              lowerHref.startsWith("https://") ||
+              lowerHref.startsWith("mailto:") ||
+              lowerHref.startsWith("tel:")
+            ) {
+              doc.link(x, y, w, h, { url: href });
+            }
+          }
+        });
+      }
+
+      const rawTitle = settings.title || "Ebook";
+      
+      const removeAccents = (str: string): string => {
+        return str
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[çÇ]/g, (match) => match === 'ç' ? 'c' : 'C');
+      };
+
+      const sanitizeFilename = (title: string): string => {
+        const base = removeAccents(title);
+        return base
+          .replace(/[\\\/:\*\?"<>|]/g, "")
+          .trim();
+      };
+
+      const baseFilename = sanitizeFilename(rawTitle) || "Ebook";
+
+      const storageKey = `ebook_export_version_${baseFilename.toLowerCase()}`;
+      const currentVersionStr = localStorage.getItem(storageKey);
+      const version = currentVersionStr ? parseInt(currentVersionStr, 10) : 1;
+
+      localStorage.setItem(storageKey, String(version + 1));
+
+      const pdfFileName = `${baseFilename}_v${version}.pdf`;
+      doc.save(pdfFileName);
+      showToast("PDF gerado com sucesso para download!", "success");
+
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Ocorreu um erro ao exportar: ${err.message || err}`, "error");
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
@@ -1537,6 +1988,26 @@ export default function App() {
         className={`${activeTab === "preview" ? "block" : "hidden print:block"}`}
       >
         <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} onContentUpdate={handleContentUpdateFromPreview} />
+      </div>
+
+      {/* Container invisível exclusivo para renderização e exportação direta de PDF */}
+      <div
+        id="pdf-render-offscreen"
+        className="no-print"
+        style={{
+          position: "fixed",
+          top: "0px",
+          left: "0px",
+          width: "210mm",
+          height: "auto",
+          overflow: "visible",
+          opacity: 0.001,
+          zIndex: -9999,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      >
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} isPrintMode={true} />
       </div>
 
       {/* GLOBAL NOTIFICATION TOAST */}
