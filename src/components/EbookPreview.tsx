@@ -669,33 +669,44 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       headings.forEach((heading) => {
         if (heading.closest('.chapter-opener')) return;
 
-        const text = heading.textContent?.trim() || '';
+        let displayTitle = heading.textContent?.trim() || '';
         // Skip headings that are too long (likely metadata or parser errors like YAML frontmatter being matched)
-        if (text && text.length >= 1 && text.length < 150) {
+        if (displayTitle && displayTitle.length >= 1 && displayTitle.length < 150) {
           const tagName = heading.tagName.toLowerCase();
           
           let level = 2;
           let isChapter = false;
-          if (tagName === 'h1') {
+          
+          const lowerTitle = displayTitle.toLowerCase();
+          if (lowerTitle.includes('fontes consultadas') || lowerTitle.includes('referências bibliográficas')) {
             level = 1;
             isChapter = true;
-          } else if (tagName === 'h2') {
-            level = 2;
-          } else if (tagName === 'h3') {
-            level = 3;
-          } else if (tagName === 'h4') {
-            level = 4;
-          } else if (tagName === 'h5') {
-            level = 5;
-          } else if (tagName === 'h6') {
-            level = 6;
+            // Remove leading numbers like "13.1 "
+            displayTitle = displayTitle.replace(/^[\d\.\s]+/, '').trim();
+            // Capitalize first letter just in case
+            displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
+          } else {
+            if (tagName === 'h1') {
+              level = 1;
+              isChapter = true;
+            } else if (tagName === 'h2') {
+              level = 2;
+            } else if (tagName === 'h3') {
+              level = 3;
+            } else if (tagName === 'h4') {
+              level = 4;
+            } else if (tagName === 'h5') {
+              level = 5;
+            } else if (tagName === 'h6') {
+              level = 6;
+            }
           }
 
           // Avoid duplicating identical headings on the exact same page
-          const isDup = entries.some(e => e.title === text && e.relativePageOffset === index);
+          const isDup = entries.some(e => e.title === displayTitle && e.relativePageOffset === index);
           if (!isDup) {
             entries.push({
-              title: text,
+              title: displayTitle,
               relativePageOffset: index,
               isChapter: isChapter,
               level: level
