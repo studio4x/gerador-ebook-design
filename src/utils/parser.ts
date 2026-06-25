@@ -17,6 +17,16 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
 
   let mergedMarkdown = cleanedContents.join('\n\n<!-- block-separator -->\n\n');
 
+  // Hardcoded fixes for specific typos in the original content
+  mergedMarkdown = mergedMarkdown.replace(
+    /corrigir a pessoa ou encaix[aá]-?la em um padrão/gi,
+    "corrigir a pessoa ou encaixar a pessoa em um padrão"
+  );
+  mergedMarkdown = mergedMarkdown.replace(
+    /corrigir a pessoa ou encaixála em um padrão/gi,
+    "corrigir a pessoa ou encaixar a pessoa em um padrão"
+  );
+
   // Handle manual page breaks
   mergedMarkdown = mergedMarkdown.replace(/(\[===\s*QUEBRA DE PÁGINA MANUAL\s*===\]|<!--\s*page-break\s*-->)/gi, '<div class="manual-page-break" data-page-break="true"></div>');
 
@@ -59,6 +69,10 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     // CUIDADO / ATENÇÃO / AVISO -> box-cuidado
     else if (text.startsWith('aviso') || text.includes('atenção') || text.includes('cuidado') || text.includes('nota importante') || text.includes('warning') || text.includes('alert')) {
         wrapNextUntilHeading(heading, 'box-cuidado');
+    }
+    // REFERÊNCIAS / FONTES CONSULTADAS -> secao-referencias
+    else if (text.includes('referências') || text.includes('referencias') || text.includes('fontes consultadas') || text.includes('referência bibliográfica') || text.includes('referências bibliográficas')) {
+        wrapNextUntilHeading(heading, 'secao-referencias');
     }
     // CAPÍTULOS -> force the "Chapter Opener" visual
     else if (text.startsWith('capítulo')) {
@@ -177,6 +191,24 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
         // Insert it right after the block element ancestor in doc.body
         doc.body.insertBefore(br, ancestor.nextSibling);
       }
+    }
+  });
+
+  // Transform specific links into buttons
+  const allLinks = Array.from(doc.querySelectorAll('a'));
+  allLinks.forEach((a) => {
+    const href = a.getAttribute('href') || '';
+    if (
+      href.includes('wa.me/5511964818096') || 
+      href.includes('conexaoseres.com.br/agendar-avaliacao-e-contato') || 
+      href.includes('maps.app.goo.gl/MKFq5ErMY2tHTFED6')
+    ) {
+      a.style.textDecoration = 'underline';
+      a.style.fontWeight = '500';
+    } else if (href.includes('instagram.com/conexao.seres')) {
+      a.setAttribute('href', 'https://www.instagram.com/conexao.seres');
+    } else if (href.includes('contato@conexaoseres.com.br') || a.textContent?.includes('contato@conexaoseres.com.br')) {
+      a.setAttribute('href', 'mailto:contato@conexaoseres.com.br');
     }
   });
 

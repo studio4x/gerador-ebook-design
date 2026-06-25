@@ -27,15 +27,45 @@
   .no-print {
     display: none !important;
   }
+  .ebook-preview-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .no-print-layout {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .ebook-layout-canvas {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .page-wrapper-card {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .page-wrapper-card:last-child,
+  .page-wrapper-card:last-of-type {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
   .page {
     margin: 0 !important;
     box-shadow: none !important;
-    border: none !important;
-    page-break-after: always;
-    break-after: page;
-    width: 210mm !important;
-    height: 297mm !important;
-    max-height: 297mm !important;
+  }
+  .page-wrapper-card:last-child .page,
+  .page-wrapper-card:last-of-type .page,
+  .page:last-of-type,
+  .pdf-page:last-of-type {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
   
   /* Ensure background colors print correctly */
@@ -235,6 +265,18 @@ h1, h2, h3, h4, h5 {
 .frase-central p {
   margin: 0;
   padding: 0;
+}
+
+/* Seção de Referências e Fontes Consultadas */
+.secao-referencias,
+.secao-referencias p,
+.secao-referencias li,
+.secao-referencias ul,
+.secao-referencias ol,
+.secao-referencias blockquote {
+  text-align: left !important;
+  text-justify: none !important;
+  text-indent: 0 !important;
 }
 
 .chapter-opener {

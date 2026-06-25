@@ -38,6 +38,8 @@ export type ProjectSettings = {
   footerStyle?: string;
   pageNumberStyle?: string;
   descriptiveHeader?: boolean;
+  coverBadgeText?: string;
+  coverImageUrl?: string;
 };
 
 export type BlockRevision = {
@@ -90,5 +92,6 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   email: "",
   whatsapp: "",
   schedulingUrl: "",
-  educationalWarning: ""
+  educationalWarning: "",
+  coverBadgeText: "E-book educativo"
 };

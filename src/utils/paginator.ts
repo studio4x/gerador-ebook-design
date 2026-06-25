@@ -10,7 +10,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   // Custom height footprint units that map to visual space occupied under 297mm A4 bounds
   const limits = {
     compact: 460,       // Reduced from 550 to respect the bottom margin & footer space
-    comfortable: 350,   // Reduced from 440 to avoid crowding the footer
+    comfortable: 335,   // Adjusted per request
     premium: 250        // Slightly reduced to ensure premium editorial has ample footer safety
   };
   
@@ -25,7 +25,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
 
     // Detect if this page contains a manual page break
     const hasManualBreak = currentPageNodes.some(
-      n => n.classList.contains('manual-page-break') || n.getAttribute('data-page-break') === 'true'
+      n => n.classList.contains('manual-page-break') || n.classList.contains('page-break') || n.getAttribute('data-page-break') === 'true'
     );
 
     if (!hasManualBreak) {
@@ -97,11 +97,11 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     // Check if it's a chapter opener
     const isChapterOpener = node.classList.contains('chapter-opener');
-    const isManualPageBreak = node.classList.contains('manual-page-break') || node.getAttribute('data-page-break') === 'true';
+    const isManualPageBreak = node.classList.contains('manual-page-break') || node.classList.contains('page-break') || node.getAttribute('data-page-break') === 'true';
     
     if (isManualPageBreak) {
       const hasVisibleContent = currentPageNodes.some(
-        n => !(n.classList.contains('manual-page-break') || n.getAttribute('data-page-break') === 'true')
+        n => !(n.classList.contains('manual-page-break') || n.classList.contains('page-break') || n.getAttribute('data-page-break') === 'true')
       );
 
       // Append the manual page break to the current page's nodes so it is retained in the page HTML

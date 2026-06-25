@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   EbookProject,
   ContentRevision,
+  BlockRevision,
 } from "./types";
 import { parseEbookContent, extractMetadataFromContent } from "./utils/parser";
 import { chunkIntoPages } from "./utils/paginator";
@@ -31,13 +32,22 @@ import {
   LogIn,
   Edit3,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Save,
+  Clock
 } from "lucide-react";
 
 // Import CloudSync & Firebase Auth
 import { CloudSync } from "./components/CloudSync";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User as FirebaseUser } from "firebase/auth";
+
+function safeUUID(): string {
+  if (typeof window !== "undefined" && window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return "uuid-" + Math.random().toString(36).substring(2, 15) + "-" + Date.now().toString(36);
+}
 
 export default function App() {
   const initialSettings: ProjectSettings = {
@@ -109,6 +119,8 @@ export default function App() {
     }
     return [];
   });
+  
+  const [expandedBlockRevisions, setExpandedBlockRevisions] = useState<string[]>([]);
   const [contentRevisions, setContentRevisions] = useState<ContentRevision[]>(() => {
     const saved = localStorage.getItem("ebook_content_revisions");
     if (saved) {
@@ -260,26 +272,46 @@ export default function App() {
   // Save to localStorage whenever things change
   useEffect(() => {
     if (revisions.length > 0) {
-      localStorage.setItem("ebook_layout_revisions", JSON.stringify(revisions));
+      try {
+        localStorage.setItem("ebook_layout_revisions", JSON.stringify(revisions));
+      } catch (e) {
+        console.error("Failed to save ebook_layout_revisions to localStorage:", e);
+      }
     }
   }, [revisions]);
 
   useEffect(() => {
     if (activeRevisionId) {
-      localStorage.setItem("ebook_layout_active_id", activeRevisionId);
+      try {
+        localStorage.setItem("ebook_layout_active_id", activeRevisionId);
+      } catch (e) {
+        console.error("Failed to save ebook_layout_active_id to localStorage:", e);
+      }
     }
   }, [activeRevisionId]);
 
   useEffect(() => {
-    localStorage.setItem("ebook_layout_settings", JSON.stringify(settings));
+    try {
+      localStorage.setItem("ebook_layout_settings", JSON.stringify(settings));
+    } catch (e) {
+      console.error("Failed to save ebook_layout_settings to localStorage:", e);
+    }
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
+    try {
+      localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
+    } catch (e) {
+      console.error("Failed to save ebook_layout_blocks to localStorage:", e);
+    }
   }, [blocks]);
 
   useEffect(() => {
-    localStorage.setItem("ebook_content_revisions", JSON.stringify(contentRevisions));
+    try {
+      localStorage.setItem("ebook_content_revisions", JSON.stringify(contentRevisions));
+    } catch (e) {
+      console.error("Failed to save ebook_content_revisions to localStorage:", e);
+    }
   }, [contentRevisions]);
 
   // Intercept Close/Reload attempts and handle tab visibility to keep PDF export active
@@ -330,7 +362,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.88";
+  const buildVersionStr = "v1.4.119";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -408,7 +440,7 @@ export default function App() {
     for (const file of files) {
       const text = await file.text();
       newBlocks.push({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         filename: file.name,
         content: text,
         originalContent: text,
@@ -424,7 +456,7 @@ export default function App() {
     setBlocks((prev) => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         filename: `Bloco Manual ${prev.length + 1}`,
         content: "",
         originalContent: "",
@@ -439,6 +471,47 @@ export default function App() {
 
   const removeBlock = (id: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const saveBlockRevision = (id: string, content: string) => {
+    setBlocks((prev) => prev.map((b) => {
+      if (b.id === id) {
+        const newRevision: BlockRevision = {
+          id: safeUUID(),
+          timestamp: new Date().toLocaleString("pt-BR"),
+          content: content,
+        };
+        return {
+          ...b,
+          revisions: [newRevision, ...(b.revisions || [])]
+        };
+      }
+      return b;
+    }));
+    showToast("Revisão do bloco salva com sucesso!", "success");
+  };
+
+  const restoreBlockRevision = (blockId: string, revision: BlockRevision) => {
+    if (!confirm("Isso irá substituir o conteúdo atual do bloco pela revisão selecionada. Deseja continuar?")) return;
+    
+    setBlocks((prev) => prev.map((b) => {
+      if (b.id === blockId) {
+        return {
+          ...b,
+          content: revision.content,
+          isEdited: true,
+          updatedAt: new Date().toLocaleString("pt-BR"),
+        };
+      }
+      return b;
+    }));
+    showToast("Revisão do bloco restaurada!", "success");
+  };
+
+  const toggleBlockRevisions = (blockId: string) => {
+    setExpandedBlockRevisions(prev => 
+      prev.includes(blockId) ? prev.filter(id => id !== blockId) : [...prev, blockId]
+    );
   };
 
 
@@ -494,7 +567,7 @@ export default function App() {
       } as ProjectSettings;
       setSettings(mergedSettings);
 
-      const newRevId = crypto.randomUUID();
+      const newRevId = safeUUID();
       const newRevision: LayoutRevision = {
         id: newRevId,
         filename: file.name,
@@ -643,7 +716,7 @@ export default function App() {
     if (blocks.length === 0) return;
 
     const newRevision: ContentRevision = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       label: label || `Revisão de conteúdo`,
       createdAt: new Date().toLocaleString("pt-BR"),
       source,
@@ -731,11 +804,11 @@ export default function App() {
          newRevisions = mergedBlock.revisions || [];
          const isDuplicate = newRevisions.length > 0 && newRevisions[newRevisions.length - 1].content === mergedBlock.content;
          if (!isDuplicate) {
-             newRevisions = [...newRevisions, { id: crypto.randomUUID(), timestamp: new Date().toLocaleString("pt-BR"), content: mergedBlock.content }];
+             newRevisions = [...newRevisions, { id: safeUUID(), timestamp: new Date().toLocaleString("pt-BR"), content: mergedBlock.content }];
          }
       }
       return [{
-        id: mergedBlock ? mergedBlock.id : crypto.randomUUID(),
+        id: mergedBlock ? mergedBlock.id : safeUUID(),
         filename: "Edições Visuais.md",
         content: markdownWithFrontmatter,
         isEdited: true,
@@ -948,13 +1021,10 @@ export default function App() {
     }
 
     setIsExportingPdf(true);
-    showToast("Gerando PDF direto de alta fidelidade... Aguarde um momento.", "info");
+    showToast("Gerando PDF real de alta fidelidade via servidor... Aguarde um momento.", "info");
 
     try {
-      const { jsPDF } = await import("jspdf");
-      const html2canvas = (await import("html2canvas")).default;
-
-      // Calculate active layout values based on densityMode to feed static styles to html2canvas
+      // Calculate active layout values based on densityMode to feed static styles
       let bodyFontSize = '11.5pt';
       let bodyLineHeight = '1.5';
       let h1FontSize = '2.3rem';
@@ -993,287 +1063,161 @@ export default function App() {
         throw new Error("Contêiner de visualização não encontrado.");
       }
 
-      const pages = container.querySelectorAll(".page");
-      if (pages.length === 0) {
-        throw new Error("Nenhuma página pré-visualizada encontrada para exportação.");
+      const layoutOverrides = `
+        :root, .page, .ebook-preview-container {
+          --color-brand-petroleo: ${primaryColor} !important;
+          --color-brand-terracota: ${secondaryColor} !important;
+          --color-brand-azul: ${accentColor} !important;
+          --color-brand-areia: ${bgColor} !important;
+          --color-brand-offwhite: ${bgColor} !important;
+          --font-sans: ${fontFamily} !important;
+          --font-display: ${fontDisplay} !important;
+          --ebook-body-size: ${bodyFontSize} !important;
+          --ebook-line-height: ${bodyLineHeight} !important;
+          --ebook-h1-size: ${h1FontSize} !important;
+          --ebook-h2-size: ${h2FontSize} !important;
+          --ebook-para-margin: ${paraMargin} !important;
+        }
+        .page {
+          display: block !important;
+          position: relative !important;
+          width: 210mm !important;
+          height: 297mm !important;
+          max-height: 297mm !important;
+          box-sizing: border-box !important;
+          padding: 25mm 20mm !important;
+          overflow: hidden !important;
+          background-color: ${bgColor} !important;
+          font-family: ${fontFamily} !important;
+          line-height: ${bodyLineHeight} !important;
+        }
+        .ebook-content {
+          display: block !important;
+          width: 100% !important;
+          height: auto !important;
+          max-height: 228mm !important;
+          overflow: hidden !important;
+          font-size: ${bodyFontSize} !important;
+          line-height: ${bodyLineHeight} !important;
+        }
+        .ebook-content:has(.chapter-opener) {
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: center !important;
+          height: 228mm !important;
+        }
+        .footer-print {
+          position: absolute !important;
+          bottom: 25mm !important;
+          left: 20mm !important;
+          width: 170mm !important;
+          margin-top: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .header-print {
+          display: block !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .ebook-content h1 {
+          font-size: ${h1FontSize} !important;
+          line-height: 1.25 !important;
+          margin-bottom: ${paraMargin} !important;
+          font-family: ${fontDisplay} !important;
+          color: ${primaryColor} !important;
+        }
+        .ebook-content h2 {
+          font-size: ${h2FontSize} !important;
+          line-height: 1.3 !important;
+          margin-bottom: calc(${paraMargin} * 0.8) !important;
+          font-family: ${fontDisplay} !important;
+          color: ${primaryColor} !important;
+        }
+        .ebook-content h3 {
+          font-size: calc(${h2FontSize} * 0.8) !important;
+          line-height: 1.3 !important;
+          margin-bottom: calc(${paraMargin} * 0.6) !important;
+          font-family: ${fontDisplay} !important;
+          color: ${accentColor} !important;
+        }
+        .ebook-content p, .ebook-content li {
+          font-size: ${bodyFontSize} !important;
+          line-height: ${bodyLineHeight} !important;
+          margin-bottom: ${paraMargin} !important;
+          vertical-align: top !important;
+        }
+        .box-reflexao {
+          background-color: ${bgColor} !important;
+          border: 1px solid var(--color-brand-linha) !important;
+          padding: 1.5rem !important;
+          border-radius: 8px !important;
+          margin: 1.5rem 0 !important;
+        }
+        .box-informativo {
+          background-color: var(--color-brand-informativo) !important;
+          padding: 1.5rem !important;
+          border-radius: 8px !important;
+          margin: 1.5rem 0 !important;
+        }
+        .box-cuidado {
+          background-color: var(--color-brand-cuidado) !important;
+          padding: 1.5rem !important;
+          border-radius: 8px !important;
+          margin: 1.5rem 0 !important;
+        }
+      `;
+
+      let documentStyles = "";
+      const styleElements = Array.from(document.querySelectorAll("style, link[rel='stylesheet']"));
+      for (const el of styleElements) {
+        if (el.tagName.toLowerCase() === "style") {
+          documentStyles += el.innerHTML + "\n";
+        } else if (el.tagName.toLowerCase() === "link") {
+          const href = (el as HTMLLinkElement).href;
+          try {
+            if (href.startsWith(window.location.origin) || href.startsWith("/")) {
+              const res = await fetch(href);
+              const cssText = await res.text();
+              documentStyles += cssText + "\n";
+            } else {
+              // For external stylesheets like Google Fonts, we can leave them as imports
+              // but we already inject Google Fonts in the backend template.
+            }
+          } catch (e) {
+            console.warn("Failed to fetch stylesheet", href);
+          }
+        }
       }
 
-      const pageIdToPdfPageNumber = new Map<string, number>();
-      pages.forEach((page, index) => {
-        const id = (page as HTMLElement).id;
-        if (id) {
-          pageIdToPdfPageNumber.set(id, index + 1);
-        }
+      const finalCss = documentStyles + "\n" + cleanCss + "\n" + layoutOverrides;
+      
+      const clone = container.cloneNode(true) as HTMLElement;
+      clone.removeAttribute("id");
+      clone.removeAttribute("style");
+      clone.removeAttribute("aria-hidden");
+      clone.classList.remove("no-print");
+      const htmlContent = clone.outerHTML;
+
+      const response = await fetch("/api/export-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          html: htmlContent, 
+          css: finalCss,
+          fontFamily: settings.fontFamily,
+          fontDisplay: settings.fontDisplay
+        })
       });
 
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: true,
-      });
-
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-
-      for (let i = 0; i < pages.length; i++) {
-        const pageEl = pages[i] as HTMLElement;
-        
-        if (pages.length > 2) {
-          showToast(`Exportando página ${i + 1} de ${pages.length}...`, "info");
-        }
-
-        const canvas = await html2canvas(pageEl, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
-          backgroundColor: settings.backgroundColor || "#FAF8F4",
-          windowWidth: 794,
-          scrollX: 0,
-          scrollY: 0,
-          onclone: (clonedDoc) => {
-            const clonedOffscreen = clonedDoc.getElementById("pdf-render-offscreen");
-            if (clonedOffscreen) {
-              clonedOffscreen.style.position = "static";
-              clonedOffscreen.style.left = "0";
-              clonedOffscreen.style.top = "0";
-              clonedOffscreen.style.margin = "0";
-              clonedOffscreen.style.width = "210mm";
-              clonedOffscreen.style.height = "auto";
-              clonedOffscreen.style.overflow = "visible";
-              clonedOffscreen.style.opacity = "1";
-            }
-
-            const styledLinks = clonedDoc.querySelectorAll("link[rel='stylesheet'], style");
-            styledLinks.forEach((el) => {
-              if (el.tagName.toLowerCase() === "link") {
-                const href = el.getAttribute("href") || "";
-                if (!href.includes("fonts.googleapis.com") && !href.includes("fonts.gstatic.com")) {
-                  el.remove();
-                }
-              } else {
-                el.remove();
-              }
-            });
-
-            const layoutOverrides = `
-              :root, .page, .ebook-preview-container {
-                --color-brand-petroleo: ${primaryColor} !important;
-                --color-brand-terracota: ${secondaryColor} !important;
-                --color-brand-azul: ${accentColor} !important;
-                --color-brand-areia: ${bgColor} !important;
-                --color-brand-offwhite: ${bgColor} !important;
-                --font-sans: ${fontFamily} !important;
-                --font-display: ${fontDisplay} !important;
-                --ebook-body-size: ${bodyFontSize} !important;
-                --ebook-line-height: ${bodyLineHeight} !important;
-                --ebook-h1-size: ${h1FontSize} !important;
-                --ebook-h2-size: ${h2FontSize} !important;
-                --ebook-para-margin: ${paraMargin} !important;
-              }
-              .page {
-                display: block !important;
-                position: relative !important;
-                width: 210mm !important;
-                height: 297mm !important;
-                max-height: 297mm !important;
-                box-sizing: border-box !important;
-                padding: 25mm 20mm !important;
-                overflow: hidden !important;
-                background-color: ${bgColor} !important;
-                font-family: ${fontFamily} !important;
-                line-height: ${bodyLineHeight} !important;
-              }
-              .ebook-content {
-                display: block !important;
-                width: 100% !important;
-                height: auto !important;
-                max-height: 228mm !important;
-                overflow: hidden !important;
-                font-size: ${bodyFontSize} !important;
-                line-height: ${bodyLineHeight} !important;
-              }
-              .ebook-content:has(.chapter-opener) {
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: center !important;
-                height: 228mm !important;
-              }
-              .footer-print {
-                position: absolute !important;
-                bottom: 25mm !important;
-                left: 20mm !important;
-                width: 170mm !important;
-                margin-top: 0 !important;
-                box-sizing: border-box !important;
-              }
-              .header-print {
-                display: block !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-              }
-              .ebook-content h1 {
-                font-size: ${h1FontSize} !important;
-                line-height: 1.25 !important;
-                margin-bottom: ${paraMargin} !important;
-                font-family: ${fontDisplay} !important;
-                color: ${primaryColor} !important;
-              }
-              .ebook-content h2 {
-                font-size: ${h2FontSize} !important;
-                line-height: 1.3 !important;
-                margin-bottom: calc(${paraMargin} * 0.8) !important;
-                font-family: ${fontDisplay} !important;
-                color: ${primaryColor} !important;
-              }
-              .ebook-content h3 {
-                font-size: calc(${h2FontSize} * 0.8) !important;
-                line-height: 1.3 !important;
-                margin-bottom: calc(${paraMargin} * 0.6) !important;
-                font-family: ${fontDisplay} !important;
-                color: ${accentColor} !important;
-              }
-              .ebook-content p, .ebook-content li {
-                font-size: ${bodyFontSize} !important;
-                line-height: ${bodyLineHeight} !important;
-                margin-bottom: ${paraMargin} !important;
-                vertical-align: top !important;
-              }
-              .box-reflexao {
-                background-color: ${bgColor} !important;
-                border: 1px solid var(--color-brand-linha) !important;
-                padding: 1.5rem !important;
-                border-radius: 8px !important;
-                margin: 1.5rem 0 !important;
-              }
-              .box-informativo {
-                background-color: var(--color-brand-informativo) !important;
-                padding: 1.5rem !important;
-                border-radius: 8px !important;
-                margin: 1.5rem 0 !important;
-              }
-              .box-cuidado {
-                background-color: var(--color-brand-cuidado) !important;
-                padding: 1.5rem !important;
-                border-radius: 8px !important;
-                margin: 1.5rem 0 !important;
-              }
-            `;
-            const styleEl = clonedDoc.createElement("style");
-            styleEl.textContent = cleanCss + "\n" + layoutOverrides;
-            clonedDoc.head.appendChild(styleEl);
-
-            clonedDoc.querySelectorAll("[style]").forEach((el) => {
-              const elHtml = el as HTMLElement;
-              let inlineStyle = elHtml.getAttribute("style") || "";
-              if (inlineStyle.includes("oklch")) {
-                elHtml.setAttribute("style", resolveOklchToHsla(inlineStyle));
-              }
-            });
-          }
-        });
-
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-
-        if (i > 0) {
-          doc.addPage();
-        }
-
-        doc.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
-
-        // --- Adiciona texto invisível para permitir seleção (OCR-like) ---
-        try {
-          const GState = (doc as any).GState;
-          if (GState) {
-            doc.setGState(new GState({ opacity: 0 }));
-          } else {
-            doc.setTextColor(255, 255, 255);
-          }
-          
-          const pageRect = pageEl.getBoundingClientRect();
-          const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_TEXT, null);
-          let node;
-          while ((node = walker.nextNode())) {
-            const text = node.nodeValue?.trim();
-            if (!text) continue;
-            
-            const parentEl = node.parentElement;
-            if (!parentEl) continue;
-            
-            const tag = parentEl.tagName.toLowerCase();
-            if (tag === 'script' || tag === 'style') continue;
-            
-            const style = window.getComputedStyle(parentEl);
-            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
-            
-            const range = document.createRange();
-            range.selectNodeContents(node);
-            const rects = range.getClientRects();
-            if (rects.length === 0) continue;
-            
-            const fontSizePx = parseFloat(style.fontSize);
-            const fontSizeMm = (fontSizePx / pageRect.width) * pdfWidth;
-            // PDF usa pontos para fonte. 1 mm = 2.83465 pt.
-            const fontSizePt = fontSizeMm * 2.83465;
-            
-            doc.setFontSize(fontSizePt);
-            
-            const rect = rects[0];
-            const x = ((rect.left - pageRect.left) / pageRect.width) * pdfWidth;
-            const y = ((rect.top - pageRect.top) / pageRect.height) * pdfHeight;
-            const h = (rect.height / pageRect.height) * pdfHeight;
-            const w = (rect.width / pageRect.width) * pdfWidth;
-            
-            // Baseline aproximada
-            const baselineYMm = y + (h * 0.75);
-            
-            doc.text(text, x, baselineYMm, { maxWidth: w * 1.5 });
-          }
-          
-          if (GState) {
-            doc.setGState(new GState({ opacity: 1 }));
-          }
-        } catch (e) {
-          console.warn("Falha ao sobrepor texto selecionável:", e);
-        }
-        // --- Fim da sobreposição de texto ---
-
-        const linksOnPage = Array.from(pageEl.querySelectorAll<HTMLAnchorElement>('a[href]'));
-        linksOnPage.forEach((link) => {
-          const href = link.getAttribute("href");
-          if (!href) return;
-
-          const linkRect = link.getBoundingClientRect();
-          const pageRect = pageEl.getBoundingClientRect();
-
-          if (pageRect.width === 0 || pageRect.height === 0) return;
-
-          const x = ((linkRect.left - pageRect.left) / pageRect.width) * pdfWidth;
-          const y = ((linkRect.top - pageRect.top) / pageRect.height) * pdfHeight;
-          const w = (linkRect.width / pageRect.width) * pdfWidth;
-          const h = (linkRect.height / pageRect.height) * pdfHeight;
-
-          if (href.startsWith("#")) {
-            const targetId = href.replace("#", "");
-            const targetPdfPage = pageIdToPdfPageNumber.get(targetId);
-
-            if (targetPdfPage) {
-              doc.link(x, y, w, h, { pageNumber: targetPdfPage });
-            }
-          } else {
-            const lowerHref = href.toLowerCase();
-            if (
-              lowerHref.startsWith("http://") ||
-              lowerHref.startsWith("https://") ||
-              lowerHref.startsWith("mailto:") ||
-              lowerHref.startsWith("tel:")
-            ) {
-              doc.link(x, y, w, h, { url: href });
-            }
-          }
-        });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro no servidor ao gerar PDF");
       }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
 
       const rawTitle = settings.title || "Ebook";
       
@@ -1300,7 +1244,15 @@ export default function App() {
       localStorage.setItem(storageKey, String(version + 1));
 
       const pdfFileName = `${baseFilename}_v${version}.pdf`;
-      doc.save(pdfFileName);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = pdfFileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
       showToast("PDF gerado com sucesso para download!", "success");
 
     } catch (err: any) {
@@ -1504,7 +1456,7 @@ export default function App() {
                           <Trash2 size={16} />
                         </button>
                       </div>
-                      <div className="p-0">
+                      <div className="p-0 border-b border-gray-100">
                         <textarea
                           value={block.content}
                           onChange={(e) =>
@@ -1514,6 +1466,47 @@ export default function App() {
                           placeholder="Insira ou comente o markdown do capítulo aqui..."
                         />
                       </div>
+                      <div className="bg-gray-50/50 px-4 py-2.5 flex items-center justify-between">
+                        <button
+                          onClick={() => saveBlockRevision(block.id, block.content)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-[#245C5A] hover:text-[#1b4342] bg-[#E8F1F0] px-3 py-1.5 rounded-md transition-colors"
+                        >
+                          <Save size={14} />
+                          Salvar Alterações
+                        </button>
+                        
+                        {(block.revisions && block.revisions.length > 0) && (
+                          <button
+                            onClick={() => toggleBlockRevisions(block.id)}
+                            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                          >
+                            <Clock size={14} />
+                            {block.revisions.length} {block.revisions.length === 1 ? 'revisão' : 'revisões'}
+                            {expandedBlockRevisions.includes(block.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                        )}
+                      </div>
+                      
+                      {expandedBlockRevisions.includes(block.id) && block.revisions && (
+                        <div className="bg-gray-50 border-t border-gray-200 p-4 max-h-48 overflow-y-auto space-y-2">
+                          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Histórico de Versões do Bloco</h4>
+                          {block.revisions.map((rev) => (
+                            <div key={rev.id} className="flex items-center justify-between bg-white border border-gray-200 p-2.5 rounded-lg">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium text-gray-700">{rev.timestamp}</span>
+                                <span className="text-[10px] text-gray-400 font-mono truncate max-w-[200px]">{rev.id.split('-')[0]}</span>
+                              </div>
+                              <button
+                                onClick={() => restoreBlockRevision(block.id, rev)}
+                                className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                              >
+                                <History size={12} />
+                                Restaurar
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1857,7 +1850,7 @@ export default function App() {
                     <div className="space-y-3 animate-in fade-in duration-200">
                       <p className="text-xs text-gray-700 leading-relaxed">
                         Detectamos que você está logado como <strong className="text-[#245C5A]">{user.email}</strong>. 
-                        Durante a geração de EPUB, enviaremos o anexo diretamente para sua caixa de entrada. A exportação em PDF é gerada diretamente pelo seu navegador.
+                        Durante a geração de EPUB, enviaremos o anexo diretamente para sua caixa de entrada. A exportação em PDF é gerada diretamente pelo nosso motor vetorial no servidor, garantindo texto selecionável e de alta qualidade.
                       </p>
                       <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
                         <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-800 hover:text-blue-700 select-none">

@@ -8,9 +8,59 @@ interface VisualSettingsPanelProps {
   onRestoreDefault: () => void;
 }
 
+// Client-side image compression helper to optimize Base64 size while preserving high quality
+// This prevents QuotaExceededError in localStorage and stays safe under the 1MB Firestore document limit
+const compressImage = (file: File, maxWidth = 1600, maxHeight = 2000, quality = 0.9): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        
+        // Maintain aspect ratio
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string); // fallback
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Compress to optimized JPEG format
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => {
+        reject(err);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = (err) => {
+      reject(err);
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
 export function VisualSettingsPanel({ settings, setSettings, onApply, onRestoreDefault }: VisualSettingsPanelProps) {
   // Local state to hold edits before applying
   const [localSettings, setLocalSettings] = useState<ProjectSettings>(settings);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   // Sync when settings prop changes externally
   React.useEffect(() => {
@@ -65,6 +115,76 @@ export function VisualSettingsPanel({ settings, setSettings, onApply, onRestoreD
                 <option value="comfortable">Confortável</option>
                 <option value="premium">Premium</option>
               </select>
+            </Field>
+            <Field label="Etiqueta da Capa">
+              <input type="text" placeholder="Ex: E-book educativo" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.coverBadgeText !== undefined ? localSettings.coverBadgeText : 'E-book educativo'} onChange={e => handleChange('coverBadgeText', e.target.value)} />
+            </Field>
+            <Field label="Imagem de Capa (Substitui capa padrão)">
+              <div className="flex flex-col gap-2">
+                {localSettings.coverImageUrl ? (
+                  <div className="relative border border-gray-200 rounded-lg p-2 flex items-center gap-3 bg-gray-50">
+                    <img 
+                      src={localSettings.coverImageUrl} 
+                      alt="Cover Preview" 
+                      className="w-12 h-16 object-cover rounded shadow-xs" 
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-700 truncate">Imagem carregada</p>
+                      <button
+                        type="button"
+                        onClick={() => handleChange('coverImageUrl', undefined)}
+                        className="text-red-500 hover:text-red-700 text-xs font-bold mt-1"
+                      >
+                        Remover Imagem
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center justify-center bg-gray-50/50 hover:bg-gray-50 transition-colors cursor-pointer relative h-[72px]">
+                    {isCompressing ? (
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <svg className="animate-spin h-5 w-5 text-[#245C5A]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-[10px] font-medium text-gray-500">Otimizando imagem...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setIsCompressing(true);
+                              try {
+                                const compressedUrl = await compressImage(file, 1600, 2000, 0.9);
+                                handleChange('coverImageUrl', compressedUrl);
+                              } catch (err) {
+                                console.error("Erro ao otimizar imagem:", err);
+                                // Fallback to normal read if compression fails
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  handleChange('coverImageUrl', reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              } finally {
+                                setIsCompressing(false);
+                              }
+                            }
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <svg className="w-5 h-5 text-gray-400 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <span className="text-[11px] font-medium text-gray-600">Upload de Capa Completa</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </Field>
             <Field label="Borda de Página">
               <div className="flex items-center h-full">

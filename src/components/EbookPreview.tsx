@@ -603,8 +603,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const hasNoData = !safeSettings.title && !safeSettings.brand && activeContentPages.length === 0;
 
   // Determine page presence dynamically to calculate exact page offsets
+  const hasCapaImagem = !!safeSettings.coverImageUrl;
   const hasCapa = !!(safeSettings.title || safeSettings.professionalName);
-  const hasRosto = !!(safeSettings.title || safeSettings.subtitle || safeSettings.supportPhrase);
+  const hasRosto = false; // Folha de Rosto desativada por padrão a pedido do usuário
   const hasAviso = !!safeSettings.educationalWarning;
   const hasSumario = safeSettings.generateToc;
 
@@ -801,6 +802,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   // Calculate dynamic starting and content page boundaries
   let tempSumstart = 1;
+  const capaImagemPageNum = hasCapaImagem ? tempSumstart++ : 0;
   const capaPageNum = hasCapa ? tempSumstart++ : 0;
   const rostoPageNum = hasRosto ? tempSumstart++ : 0;
   const avisoPageNum = hasAviso ? tempSumstart++ : 0;
@@ -995,9 +997,12 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   // Compile exact listing of projected pages with label identifiers
   const pagesList = useMemo(() => {
-    const list: { id: string; label: string; type: 'capa' | 'rosto' | 'aviso' | 'sumario' | 'conteudo' | 'cta' | 'final'; pageNum: number; sumarioPageIndex?: number }[] = [];
+    const list: { id: string; label: string; type: 'capa_imagem' | 'capa' | 'rosto' | 'aviso' | 'sumario' | 'conteudo' | 'cta' | 'final'; pageNum: number; sumarioPageIndex?: number }[] = [];
     let pNum = 1;
     
+    if (hasCapaImagem) {
+      list.push({ id: 'capa-imagem-page', label: 'Capa Ilustrada', type: 'capa_imagem', pageNum: pNum++ });
+    }
     if (hasCapa) {
       list.push({ id: 'capa-page', label: 'Capa do E-book', type: 'capa', pageNum: pNum++ });
     }
@@ -1027,14 +1032,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       const fallbackCh = `Capítulo ${idx + 1}`;
       list.push({ id: `content-page-${idx}`, label: rawCh || fallbackCh, type: 'conteudo', pageNum: pNum++ });
     });
-    if (safeSettings.ctaText) {
-      list.push({ id: 'cta-page', label: 'Convite / CTA', type: 'cta', pageNum: pNum++ });
-    }
-    if (safeSettings.brand || safeSettings.professionalName || safeSettings.website || safeSettings.whatsapp || safeSettings.email) {
-      list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
-    }
+    // if (safeSettings.ctaText) {
+    //   list.push({ id: 'cta-page', label: 'Convite / CTA', type: 'cta', pageNum: pNum++ });
+    // }
+    // if (safeSettings.brand || safeSettings.professionalName || safeSettings.website || safeSettings.whatsapp || safeSettings.email) {
+    //   list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
+    // }
     return list;
-  }, [hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, contentStartPageNum, activeContentPages, pageChapterTitles, safeSettings]);
+  }, [hasCapaImagem, hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, contentStartPageNum, activeContentPages, pageChapterTitles, safeSettings]);
 
   // Perform full search text matching calculation
   const checkPageMatch = (pageId: string) => {
@@ -1123,10 +1128,20 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       {/* Dynamic Style injection specifically holding Print rendering settings safe inside any target layout state */}
       <style>{`
         @media print {
+          .ebook-preview-container {
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 210mm !important;
+            max-width: 210mm !important;
+            height: auto !important;
+            min-height: 0 !important;
+          }
           .no-print-layout {
             display: block !important;
             padding: 0 !important;
             margin: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
           }
           .ebook-layout-canvas {
             display: block !important;
@@ -1137,6 +1152,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
             margin: 0 !important;
             border: none !important;
             background: transparent !important;
+            height: auto !important;
+            min-height: 0 !important;
           }
           .page-wrapper-card {
             box-shadow: none !important;
@@ -1145,6 +1162,13 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
             margin: 0 !important;
             padding: 0 !important;
             background: transparent !important;
+            page-break-after: always !important;
+            break-after: page !important;
+          }
+          .page-wrapper-card:last-child,
+          .page-wrapper-card:last-of-type {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
           }
           /* Eliminate any browser grid layout gaps when creating PDF */
           .ebook-layout-canvas {
@@ -1534,7 +1558,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                 width: '100%'
               }}
             >
-               {pagesList.map((p) => {
+               {pagesList.map((p, pageListIndex) => {
                  const isSearchMatch = searchQuery.trim() && checkPageMatch(p.id);
                  
                  // Highlight selected matches with a gorgeous terracotta border highlight
@@ -1571,37 +1595,65 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                          height: viewMode === 'grid' ? '297mm' : undefined,
                        }}
                      >
-                       {p.type === 'capa' && (
-                         <section id="capa-page" className="page flex flex-col justify-center relative select-none">
-                           <div className="absolute top-0 right-0 w-64 h-64 bg-[#F4EFE7] rounded-bl-full opacity-50 -z-10"></div>
-                           <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FAF8F4] rounded-tr-full opacity-50 -z-10"></div>
-                           
-                           <div className="mb-12">
-                             {safeSettings.materialType && (
-                               <span className="inline-block bg-[#245C5A] text-white px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-semibold mb-4">
-                                 {safeSettings.materialType.replace(/de baixo ticket/gi, "").replace(/baixo ticket/gi, "").replace(/barato/gi, "").replace(/\s+/g, " ").trim()}
-                               </span>
-                             )}
-                             <h1 className="text-5xl md:text-6xl font-display text-[#245C5A] font-bold leading-tight mb-4">
-                               {safeSettings.title}
-                             </h1>
-                             <h2 className="text-2xl text-[#6F8F9A] font-sans font-medium max-w-2xl">
-                               {safeSettings.subtitle}
-                             </h2>
-                           </div>
+                        {p.type === 'capa_imagem' && (
+                          <section 
+                            id="capa-imagem-page" 
+                            className="page flex flex-col justify-center relative select-none !p-0"
+                          >
+                            {safeSettings.coverImageUrl && (
+                              <div className="w-full h-full absolute inset-0">
+                                <img 
+                                  src={safeSettings.coverImageUrl} 
+                                  alt="Capa Ilustrada" 
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+                            )}
+                          </section>
+                        )}
 
-                           <div className="mt-auto">
-                             <div className="w-16 h-1 bg-[#C9826B] mb-6"></div>
-                             <p className="font-bold text-[#2F3437] text-lg uppercase tracking-wide">{safeSettings.professionalName}</p>
-                             <p className="text-[#6F8F9A]">{safeSettings.professionalTitle}</p>
-                             <p className="text-[#6F8F9A] text-sm">{safeSettings.professionalReg}</p>
-                           </div>
-                           
-                           {safeSettings.brand && (
-                             <div className="absolute bottom-10 right-10 flex items-center gap-2">
-                                 <span className="text-[#245C5A] font-display font-semibold text-xl tracking-tight">{safeSettings.brand}</span>
+                       {p.type === 'capa' && (
+                         <section 
+                           id="capa-page" 
+                           className="page flex flex-col justify-center relative select-none"
+                         >
+                           <>
+                             <div className="mb-4 inline-block">
+                               <span className="inline-block bg-[#245C5A]/10 text-[#245C5A] border border-[#245C5A]/20 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide shadow-xs">
+                                 {safeSettings.coverBadgeText !== undefined && safeSettings.coverBadgeText !== "" ? safeSettings.coverBadgeText : "E-book educativo"}
+                               </span>
                              </div>
-                           )}
+                             <div className="absolute top-0 right-0 w-64 h-64 bg-[#F4EFE7] rounded-bl-full opacity-50 -z-10"></div>
+                             <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FAF8F4] rounded-tr-full opacity-50 -z-10"></div>
+                             
+                             <div className="mb-12">
+                               {safeSettings.materialType && (
+                                 <span className="inline-block bg-[#245C5A] text-white px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-semibold mb-4">
+                                   {safeSettings.materialType.replace(/de baixo ticket/gi, "").replace(/baixo ticket/gi, "").replace(/barato/gi, "").replace(/\s+/g, " ").trim()}
+                                 </span>
+                               )}
+                               <h1 className="text-5xl md:text-6xl font-display text-[#245C5A] font-bold leading-tight mb-4">
+                                 {safeSettings.title}
+                               </h1>
+                               <h2 className="text-2xl text-[#6F8F9A] font-sans font-medium max-w-2xl">
+                                 {safeSettings.subtitle}
+                               </h2>
+                             </div>
+
+                             <div className="mt-auto">
+                               <div className="w-16 h-1 bg-[#C9826B] mb-6"></div>
+                               <p className="font-bold text-[#2F3437] text-lg uppercase tracking-wide">{safeSettings.professionalName}</p>
+                               <p className="text-[#6F8F9A]">{safeSettings.professionalTitle}</p>
+                               <p className="text-[#6F8F9A] text-sm">{safeSettings.professionalReg}</p>
+                              </div>
+                             
+                             {safeSettings.brand && (
+                               <div className="absolute bottom-10 right-10 flex items-center gap-2">
+                                   <span className="text-[#245C5A] font-display font-semibold text-xl tracking-tight">{safeSettings.brand}</span>
+                               </div>
+                             )}
+                           </>
                          </section>
                        )}
 
@@ -1707,7 +1759,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        })()}
 
                        {p.type === 'conteudo' && (() => {
-                         const contentIdx = pagesList.filter((x, idx) => idx < pagesList.indexOf(p) && x.type === 'conteudo').length;
+                         const contentIdx = pagesList.slice(0, pageListIndex).filter(x => x.type === 'conteudo').length;
                          const pageHtml = activeContentPages[contentIdx] || '';
                          return (
                            <section id={p.id} className="page flex flex-col justify-between scroll-mt-6">
