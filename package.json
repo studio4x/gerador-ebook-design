@@ -30,6 +30,7 @@
     "motion": "^12.23.24",
     "nodemailer": "^9.0.1",
     "puppeteer": "^25.2.1",
+    "@supabase/supabase-js": "^2.57.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",

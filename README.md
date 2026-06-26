@@ -18,3 +18,10 @@ View your app in AI Studio: https://ai.studio/apps/d82b0a16-50eb-4307-b0cd-c9b48
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Supabase
+
+Cloud sync now uses Supabase through the server API.
+
+1. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in [.env.local](.env.local)
+2. Apply the SQL migration at [supabase/migrations/20260626_create_ebooks_table.sql](supabase/migrations/20260626_create_ebooks_table.sql)

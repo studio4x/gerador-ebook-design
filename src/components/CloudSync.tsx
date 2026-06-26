@@ -1,20 +1,26 @@
-import React, { useState, useEffect } from "react";
-import { auth, db, handleFirestoreError, OperationType } from "../lib/firebase";
-import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, query, where, deleteDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
+import { auth } from "../lib/firebase";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from "firebase/auth";
 import { Cloud, LogIn, LogOut, Save, DownloadCloud, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
-import { ProjectSettings, ContentBlock } from "../types";
+import { ContentBlock, ProjectSettings } from "../types";
+import {
+  deleteCloudProject as apiDeleteCloudProject,
+  listCloudProjects,
+  loadCloudProject,
+  renameCloudProject,
+  saveCloudProject,
+} from "../lib/cloud-sync-api";
 
 type CloudProject = {
   id: string;
-  userId?: string;
-  title?: string;
-  normalizedTitle?: string;
-  blocks?: string;
-  settings?: string;
-  version?: number;
-  createdAt?: any;
-  updatedAt?: any;
+  user_id: string;
+  title: string;
+  normalized_title: string;
+  blocks: ContentBlock[] | string;
+  settings: ProjectSettings | string;
+  version: number;
+  created_at?: string;
+  updated_at?: string;
 };
 
 const normalizeProjectTitle = (title: string): string => {
@@ -25,17 +31,16 @@ const normalizeProjectTitle = (title: string): string => {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .trim();
-
   return cleaned || "ebook";
 };
 
-export function CloudSync({ 
-  settings, 
-  blocks, 
-  setSettings, 
+export function CloudSync({
+  settings,
+  blocks,
+  setSettings,
   setBlocks,
-  showToast 
-}: { 
+  showToast,
+}: {
   settings: ProjectSettings;
   blocks: ContentBlock[];
   setSettings: (s: ProjectSettings) => void;
@@ -43,10 +48,12 @@ export function CloudSync({
   showToast: (msg: string, type: "success" | "error" | "info") => void;
 }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"Salvando..." | "Salvo" | "">("");
+  const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([]);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editingProjectTitle, setEditingProjectTitle] = useState("");
 
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => localStorage.getItem("ebook_cloud_current_project_id"));
   const [currentProjectName, setCurrentProjectName] = useState<string>(() => localStorage.getItem("ebook_cloud_current_project_name") || "");
@@ -54,8 +61,6 @@ export function CloudSync({
     const stored = localStorage.getItem("ebook_cloud_current_project_version");
     return stored ? Number(stored) || 0 : 0;
   });
-  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const [editingProjectTitle, setEditingProjectTitle] = useState("");
 
   const setCurrentCloudProject = (projectId: string | null, title = "", version = 0) => {
     setCurrentProjectId(projectId);
@@ -74,19 +79,35 @@ export function CloudSync({
   };
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsub();
   }, []);
 
+  const loadCloudProjects = async () => {
+    if (!user) return;
+    try {
+      setCloudProjects(await listCloudProjects(user.uid));
+    } catch (err) {
+      showToast("Erro ao carregar projetos da nuvem.", "error");
+    }
+  };
+
+  const findProjectByNormalizedTitle = async (normalizedTitle: string, excludeId?: string): Promise<CloudProject | null> => {
+    if (!user) return null;
+    try {
+      const projects = await listCloudProjects(user.uid);
+      return projects.find((project) => project.normalized_title === normalizedTitle && project.id !== excludeId) || null;
+    } catch {
+      return null;
+    }
+  };
+
   const handleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithPopup(auth, new GoogleAuthProvider());
       showToast("Logado com sucesso!", "success");
     } catch (err: any) {
-      showToast("Erro ao fazer login: " + err.message, "error");
+      showToast("Erro ao fazer login: " + (err?.message || err), "error");
     }
   };
 
@@ -96,57 +117,13 @@ export function CloudSync({
     showToast("Você saiu da conta.", "info");
   };
 
-  const findProjectByNormalizedTitle = async (normalizedTitle: string, excludeId?: string): Promise<CloudProject | null> => {
-    if (!user) return null;
-    try {
-      const q = query(
-        collection(db, "ebooks"),
-        where("userId", "==", user.uid),
-        where("normalizedTitle", "==", normalizedTitle)
-      );
-      const snap = await getDocs(q);
-      let found: CloudProject | null = null;
-      snap.forEach(d => {
-        if (!excludeId || d.id !== excludeId) {
-          found = { id: d.id, ...d.data() } as CloudProject;
-        }
-      });
-      return found;
-    } catch (err) {
-      console.error("Erro ao pesquisar por nome normalizado", err);
-      return null;
-    }
-  };
-
-  const loadCloudProjects = async () => {
-    if (!user) return;
-    try {
-      const q = query(collection(db, "ebooks"), where("userId", "==", user.uid));
-      const snap = await getDocs(q);
-      const projs: CloudProject[] = [];
-      snap.forEach(d => {
-        projs.push({ id: d.id, ...d.data() } as CloudProject);
-      });
-      setCloudProjects(projs);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.LIST, "ebooks");
-    }
-  };
-
-  const handleOpenModal = () => {
-    setShowModal(true);
-    if (user) {
-      loadCloudProjects();
-    }
-  };
-
   const saveToCloud = async (silent = false) => {
     if (!user) return;
     if (blocks.length === 0) {
       if (!silent) showToast("Adicione conteúdo antes de salvar na nuvem.", "error");
       return;
     }
-    
+
     setIsSyncing(true);
     if (silent) setSyncStatus("Salvando...");
 
@@ -157,91 +134,71 @@ export function CloudSync({
 
       if (!currentProjectId) {
         const duplicate = await findProjectByNormalizedTitle(normalizedTitle);
-        if (duplicate) {
-          projectId = duplicate.id;
-        }
+        if (duplicate) projectId = duplicate.id;
       }
 
-      const docRef = doc(db, "ebooks", projectId);
-      let existingData: CloudProject | null = null;
-      try {
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          existingData = docSnap.data() as CloudProject;
-        }
-      } catch (err) {
-        console.warn("Nao foi possivel obter o documento existente (pode nao existir ainda):", err);
-      }
-      const nextVersion = (existingData?.version || currentProjectVersion || 0) + 1;
+      const existing = await loadCloudProject(user.uid, projectId).catch(() => null);
+      const nextVersion = Math.max(existing?.version || 0, currentProjectVersion || 0) + 1;
 
-      await setDoc(docRef, {
+      const saved = await saveCloudProject({
         userId: user.uid,
+        email: user.email,
+        projectId,
         title: displayTitle,
         normalizedTitle,
+        blocks,
+        settings,
         version: nextVersion,
-        blocks: JSON.stringify(blocks),
-        settings: JSON.stringify(settings),
-        createdAt: existingData?.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      });
 
-      setCurrentCloudProject(projectId, displayTitle, nextVersion);
-      
+      setCurrentCloudProject(saved.id, saved.title, saved.version);
+
       if (!silent) {
-        showToast(`Projeto salvo na nuvem com sucesso! Versão v${nextVersion}.`, "success");
-        loadCloudProjects();
+        showToast(`Projeto salvo na nuvem com sucesso! Versão v${saved.version}.`, "success");
+        await loadCloudProjects();
       } else {
         setSyncStatus("Salvo");
         setTimeout(() => setSyncStatus(""), 3000);
       }
-    } catch (err) {
-      try {
-        handleFirestoreError(err, OperationType.WRITE, `ebooks/${currentProjectId || 'new'}`);
-      } catch (e: any) {
-        if (!silent) showToast("Erro ao salvar: " + e.message, "error");
+    } catch (err: any) {
+      if (!silent) {
+        showToast("Erro ao salvar: " + (err?.message || err), "error");
       }
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Auto-save logic
   useEffect(() => {
     if (!user || blocks.length === 0) return;
-    
     const timer = setTimeout(() => {
-      saveToCloud(true);
+      void saveToCloud(true);
     }, 5000);
-    
     return () => clearTimeout(timer);
   }, [blocks, settings, user]);
 
   const loadFromCloud = async (projectId: string) => {
     try {
-      const d = await getDoc(doc(db, "ebooks", projectId));
-      if (d.exists()) {
-        const data = d.data() as CloudProject;
-        if (data.settings && data.blocks) {
-          setSettings(JSON.parse(data.settings));
-          setBlocks(JSON.parse(data.blocks));
-          setCurrentCloudProject(projectId, data.title || "Ebook", data.version || 1);
-          showToast("Projeto carregado com sucesso!", "success");
-          setShowModal(false);
-        }
-      } else {
+      const data = user ? await loadCloudProject(user.uid, projectId) : null;
+      if (!data) {
         showToast("Projeto não encontrado na nuvem.", "error");
+        return;
       }
-    } catch (err) {
-      try {
-        handleFirestoreError(err, OperationType.GET, `ebooks/${projectId}`);
-      } catch (e: any) {
-        showToast("Erro ao carregar: " + e.message, "error");
-      }
+
+      const parsedSettings = typeof data.settings === "string" ? JSON.parse(data.settings) : data.settings;
+      const parsedBlocks = typeof data.blocks === "string" ? JSON.parse(data.blocks) : data.blocks;
+
+      setSettings(parsedSettings);
+      setBlocks(parsedBlocks);
+      setCurrentCloudProject(projectId, data.title || "Ebook", data.version || 1);
+      showToast("Projeto carregado com sucesso!", "success");
+      setShowModal(false);
+    } catch (err: any) {
+      showToast("Erro ao carregar: " + (err?.message || err), "error");
     }
   };
 
-  const saveProjectTitle = async (proj: CloudProject, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const saveProjectTitle = async (proj: CloudProject) => {
     if (!user) return;
 
     const nextTitle = editingProjectTitle.trim();
@@ -251,61 +208,47 @@ export function CloudSync({
     }
 
     const normalizedTitle = normalizeProjectTitle(nextTitle);
-
     const duplicate = await findProjectByNormalizedTitle(normalizedTitle, proj.id);
     if (duplicate) {
       showToast("Já existe outro projeto salvo com esse nome.", "error");
       return;
     }
 
-    const nextVersion = (proj.version || 0) + 1;
-
     try {
-      await setDoc(doc(db, "ebooks", proj.id), {
+      const saved = await renameCloudProject({
+        userId: user.uid,
+        projectId: proj.id,
         title: nextTitle,
         normalizedTitle,
-        version: nextVersion,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      });
 
       if (currentProjectId === proj.id) {
-        setCurrentCloudProject(proj.id, nextTitle, nextVersion);
+        setCurrentCloudProject(saved.id, saved.title, saved.version);
       }
 
       setEditingProjectId(null);
       setEditingProjectTitle("");
-      showToast(`Projeto renomeado com sucesso! Versão v${nextVersion}.`, "success");
-      loadCloudProjects();
-    } catch (err) {
-      try {
-        handleFirestoreError(err, OperationType.WRITE, `ebooks/${proj.id}`);
-      } catch (e: any) {
-        showToast("Erro ao renomear: " + e.message, "error");
-      }
+      showToast(`Projeto renomeado com sucesso! Versão v${saved.version}.`, "success");
+      await loadCloudProjects();
+    } catch (err: any) {
+      showToast("Erro ao renomear: " + (err?.message || err), "error");
     }
   };
 
   const deleteCloudProject = async (proj: CloudProject, e: React.MouseEvent) => {
     e.stopPropagation();
-
     const confirmed = confirm(`Excluir o projeto "${proj.title || "Ebook"}" da nuvem? Esta ação não pode ser desfeita.`);
     if (!confirmed) return;
 
     try {
-      await deleteDoc(doc(db, "ebooks", proj.id));
-
+      await apiDeleteCloudProject({ userId: user!.uid, projectId: proj.id });
       if (currentProjectId === proj.id) {
         setCurrentCloudProject(null);
       }
-
       showToast("Projeto excluído da nuvem com sucesso.", "success");
-      loadCloudProjects();
-    } catch (err) {
-      try {
-        handleFirestoreError(err, OperationType.DELETE, `ebooks/${proj.id}`);
-      } catch (e: any) {
-        showToast("Erro ao excluir: " + e.message, "error");
-      }
+      await loadCloudProjects();
+    } catch (err: any) {
+      showToast("Erro ao excluir: " + (err?.message || err), "error");
     }
   };
 
@@ -313,10 +256,12 @@ export function CloudSync({
     <>
       <div className="flex items-center gap-2">
         {syncStatus && (
-          <span className={`text-[10px] font-medium mr-2 hidden sm:block ${syncStatus === 'Salvo' ? 'text-green-600' : 'text-gray-400'}`}>
-            {syncStatus === 'Salvo' ? '✓ ' : ''}{syncStatus}
+          <span className={`text-[10px] font-medium mr-2 hidden sm:block ${syncStatus === "Salvo" ? "text-green-600" : "text-gray-400"}`}>
+            {syncStatus === "Salvo" ? "✓ " : ""}
+            {syncStatus}
           </span>
         )}
+
         {!user ? (
           <button
             onClick={handleLogin}
@@ -327,7 +272,10 @@ export function CloudSync({
         ) : (
           <div className="flex items-center gap-2">
             <button
-              onClick={handleOpenModal}
+              onClick={() => {
+                setShowModal(true);
+                void loadCloudProjects();
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0A66C2] hover:bg-[#004182] rounded-md transition-colors shadow-xs"
             >
               <Cloud size={13} /> Nuvem
@@ -344,7 +292,7 @@ export function CloudSync({
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="text-xl font-display font-bold text-gray-900 flex items-center gap-2">
@@ -354,14 +302,14 @@ export function CloudSync({
                 ✕
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto flex-1 bg-gray-50/30">
               <div className="mb-6 flex flex-col items-center justify-center p-6 bg-blue-50/50 rounded-xl border border-blue-100/50">
                 <p className="text-sm text-blue-800 mb-3 text-center opacity-80">
                   Logado como <strong>{user?.email}</strong>
                 </p>
                 <button
-                  onClick={() => saveToCloud(false)}
+                  onClick={() => void saveToCloud(false)}
                   disabled={isSyncing}
                   className="flex items-center gap-2 px-6 py-2.5 bg-[#245C5A] text-white rounded-lg font-bold hover:bg-[#1b4342] shadow-sm disabled:opacity-50 transition-colors"
                 >
@@ -371,18 +319,20 @@ export function CloudSync({
               </div>
 
               <h3 className="font-bold text-gray-900 mb-4 px-1">Meus projetos salvos:</h3>
-              
               <div className="space-y-3">
                 {cloudProjects.length === 0 && (
                   <div className="text-center py-8 text-gray-400 italic">
                     Nenhum projeto salvo na nuvem ainda.
                   </div>
                 )}
-                
-                {cloudProjects.map(proj => {
+
+                {cloudProjects.map((proj) => {
                   const isEditing = editingProjectId === proj.id;
                   return (
-                    <div key={proj.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white border border-gray-200 rounded-lg p-4 hover:border-[#245C5A] hover:shadow-sm transition-all group gap-2">
+                    <div
+                      key={proj.id}
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white border border-gray-200 rounded-lg p-4 hover:border-[#245C5A] hover:shadow-sm transition-all group gap-2"
+                    >
                       {isEditing ? (
                         <div className="flex-1 flex items-center gap-2 w-full">
                           <input
@@ -394,7 +344,7 @@ export function CloudSync({
                             onClick={(ev) => ev.stopPropagation()}
                           />
                           <button
-                            onClick={(ev) => saveProjectTitle(proj, ev)}
+                            onClick={() => void saveProjectTitle(proj)}
                             className="p-1.5 text-green-600 hover:bg-green-50 rounded border border-transparent hover:border-green-200 shrink-0"
                             title="Confirmar alteração"
                           >
@@ -427,7 +377,7 @@ export function CloudSync({
                             </span>
                           </div>
                           <p className="text-xs text-gray-400 mt-1">
-                            Atualizado em: {proj.updatedAt?.toDate ? proj.updatedAt.toDate().toLocaleString('pt-BR') : 'recente'}
+                            Atualizado em: {proj.updated_at ? new Date(proj.updated_at).toLocaleString("pt-BR") : "recente"}
                           </p>
                         </div>
                       )}
@@ -435,7 +385,7 @@ export function CloudSync({
                       {!isEditing && (
                         <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end mt-2 sm:mt-0">
                           <button
-                            onClick={() => loadFromCloud(proj.id)}
+                            onClick={() => void loadFromCloud(proj.id)}
                             className="flex border border-gray-200 items-center gap-1 px-2.5 py-1.5 bg-gray-50 hover:bg-[#E6F4EA] hover:text-[#137333] hover:border-[#A3E5B7] text-gray-700 text-xs font-semibold rounded-md transition-colors h-8"
                             title="Carregar projeto"
                           >
@@ -453,7 +403,7 @@ export function CloudSync({
                             <Pencil size={14} />
                           </button>
                           <button
-                            onClick={(ev) => deleteCloudProject(proj, ev)}
+                            onClick={(ev) => void deleteCloudProject(proj, ev)}
                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-md h-8 w-8 flex items-center justify-center transition-all"
                             title="Excluir projeto da nuvem"
                           >
