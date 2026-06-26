@@ -1,4 +1,9 @@
 import type { ContentBlock, ProjectSettings } from "../types";
+import {
+  fetchServerApi,
+  isServerApiAvailable,
+  isServerApiUnavailableError,
+} from "./server-api";
 
 export type SupabaseCloudProject = {
   id: string;
@@ -27,7 +32,7 @@ export type CloudProjectPayload = CloudUser & {
 };
 
 async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
+  const response = await fetchServerApi(input, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -88,3 +93,5 @@ export async function deleteCloudProject(input: { userId: string; projectId: str
     { method: "DELETE" }
   );
 }
+
+export { isServerApiAvailable, isServerApiUnavailableError };

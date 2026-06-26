@@ -5,6 +5,8 @@ import { Cloud, LogIn, LogOut, Save, DownloadCloud, Loader2, Trash2, Pencil, Che
 import { ContentBlock, ProjectSettings } from "../types";
 import {
   deleteCloudProject as apiDeleteCloudProject,
+  isServerApiAvailable,
+  isServerApiUnavailableError,
   listCloudProjects,
   loadCloudProject,
   renameCloudProject,
@@ -52,6 +54,7 @@ export function CloudSync({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"Salvando..." | "Salvo" | "">("");
   const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([]);
+  const [serverApiAvailable, setServerApiAvailable] = useState<boolean>(() => isServerApiAvailable());
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectTitle, setEditingProjectTitle] = useState("");
 
@@ -96,20 +99,30 @@ export function CloudSync({
   }, []);
 
   const loadCloudProjects = async () => {
-    if (!user) return;
+    if (!user || !serverApiAvailable) return;
     try {
       setCloudProjects(await listCloudProjects(user.id));
+      setServerApiAvailable(true);
     } catch (err) {
+      if (isServerApiUnavailableError(err)) {
+        setServerApiAvailable(false);
+        setShowModal(false);
+        showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+        return;
+      }
       showToast("Erro ao carregar projetos da nuvem.", "error");
     }
   };
 
   const findProjectByNormalizedTitle = async (normalizedTitle: string, excludeId?: string): Promise<CloudProject | null> => {
-    if (!user) return null;
+    if (!user || !serverApiAvailable) return null;
     try {
       const projects = await listCloudProjects(user.id);
       return projects.find((project) => project.normalized_title === normalizedTitle && project.id !== excludeId) || null;
-    } catch {
+    } catch (err) {
+      if (isServerApiUnavailableError(err)) {
+        setServerApiAvailable(false);
+      }
       return null;
     }
   };
@@ -131,6 +144,12 @@ export function CloudSync({
 
   const saveToCloud = async (silent = false) => {
     if (!user) return;
+    if (!serverApiAvailable) {
+      if (!silent) {
+        showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+      }
+      return;
+    }
     if (blocks.length === 0) {
       if (!silent) showToast("Adicione conteúdo antes de salvar na nuvem.", "error");
       return;
@@ -173,6 +192,14 @@ export function CloudSync({
         setTimeout(() => setSyncStatus(""), 3000);
       }
     } catch (err: any) {
+      if (isServerApiUnavailableError(err)) {
+        setServerApiAvailable(false);
+        setSyncStatus("");
+        if (!silent) {
+          showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+        }
+        return;
+      }
       if (!silent) {
         showToast("Erro ao salvar: " + (err?.message || err), "error");
       }
@@ -182,12 +209,12 @@ export function CloudSync({
   };
 
   useEffect(() => {
-    if (!user || blocks.length === 0) return;
+    if (!user || !serverApiAvailable || blocks.length === 0) return;
     const timer = setTimeout(() => {
       void saveToCloud(true);
     }, 5000);
     return () => clearTimeout(timer);
-  }, [blocks, settings, user]);
+  }, [blocks, settings, user, serverApiAvailable]);
 
   const loadFromCloud = async (projectId: string) => {
     try {
@@ -206,6 +233,12 @@ export function CloudSync({
       showToast("Projeto carregado com sucesso!", "success");
       setShowModal(false);
     } catch (err: any) {
+      if (isServerApiUnavailableError(err)) {
+        setServerApiAvailable(false);
+        setShowModal(false);
+        showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+        return;
+      }
       showToast("Erro ao carregar: " + (err?.message || err), "error");
     }
   };
@@ -243,6 +276,12 @@ export function CloudSync({
       showToast(`Projeto renomeado com sucesso! Versão v${saved.version}.`, "success");
       await loadCloudProjects();
     } catch (err: any) {
+      if (isServerApiUnavailableError(err)) {
+        setServerApiAvailable(false);
+        setShowModal(false);
+        showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+        return;
+      }
       showToast("Erro ao renomear: " + (err?.message || err), "error");
     }
   };
@@ -260,6 +299,12 @@ export function CloudSync({
       showToast("Projeto excluído da nuvem com sucesso.", "success");
       await loadCloudProjects();
     } catch (err: any) {
+      if (isServerApiUnavailableError(err)) {
+        setServerApiAvailable(false);
+        setShowModal(false);
+        showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+        return;
+      }
       showToast("Erro ao excluir: " + (err?.message || err), "error");
     }
   };
@@ -285,10 +330,15 @@ export function CloudSync({
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
+                if (!serverApiAvailable) {
+                  showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
+                  return;
+                }
                 setShowModal(true);
                 void loadCloudProjects();
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0A66C2] hover:bg-[#004182] rounded-md transition-colors shadow-xs"
+              disabled={!serverApiAvailable}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0A66C2] hover:bg-[#004182] rounded-md transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#0A66C2]"
             >
               <Cloud size={13} /> Nuvem
             </button>

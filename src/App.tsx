@@ -42,6 +42,7 @@ import {
 import { ProjectManager } from "./components/ProjectManager";
 import { CloudSync } from "./components/CloudSync";
 import { auth, signInWithGoogle } from "./lib/firebase";
+import { fetchServerApi, isServerApiUnavailableError } from "./lib/server-api";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 
 type PdfDownloadInfo = {
@@ -603,7 +604,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.137";
+  const buildVersionStr = "v1.4.138";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     const rawTitle = settings.title || "Ebook";
@@ -1615,7 +1616,7 @@ export default function App() {
       let usedBrowserFallback = false;
 
       try {
-        const response = await fetch("/api/export-pdf", {
+        const response = await fetchServerApi("/api/export-pdf", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -1639,6 +1640,7 @@ export default function App() {
       } catch (err: any) {
         const status = typeof err?.status === "number" ? err.status : undefined;
         const shouldUseBrowserFallback =
+          isServerApiUnavailableError(err) ||
           err instanceof TypeError ||
           status === 404 ||
           (typeof status === "number" && status >= 500);
