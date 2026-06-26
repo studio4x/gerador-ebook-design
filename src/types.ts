@@ -95,3 +95,13 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   educationalWarning: "",
   coverBadgeText: "E-book educativo"
 };
+
+export interface LocalProject {
+  id: string;
+  title: string;
+  settings: ProjectSettings;
+  blocks: ContentBlock[];
+  contentRevisions: ContentRevision[];
+  updatedAt: string;
+}
+

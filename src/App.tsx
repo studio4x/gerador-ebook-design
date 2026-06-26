@@ -6,6 +6,7 @@ import {
   EbookProject,
   ContentRevision,
   BlockRevision,
+  LocalProject,
 } from "./types";
 import { parseEbookContent, extractMetadataFromContent } from "./utils/parser";
 import { chunkIntoPages } from "./utils/paginator";
@@ -37,7 +38,8 @@ import {
   Clock
 } from "lucide-react";
 
-// Import CloudSync & Firebase Auth
+// Import ProjectManager, CloudSync & Firebase Auth
+import { ProjectManager } from "./components/ProjectManager";
 import { CloudSync } from "./components/CloudSync";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User as FirebaseUser } from "firebase/auth";
@@ -101,6 +103,23 @@ export default function App() {
   };
 
   const [activeTab, setActiveTab] = useState<"content" | "visual" | "preview">("content");
+  
+  // Local project list and active project tracking
+  const [projectsList, setProjectsList] = useState<LocalProject[]>(() => {
+    const savedList = localStorage.getItem("ebook_projects_list");
+    if (savedList) {
+      try {
+        return JSON.parse(savedList);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const [currentProjectId, setCurrentProjectId] = useState<string>(() => {
+    const savedId = localStorage.getItem("ebook_current_project_id");
+    return savedId || "default_project";
+  });
+
   const [settings, setSettings] = useState<ProjectSettings>(() => {
     const saved = localStorage.getItem("ebook_layout_settings");
     if (saved) {
@@ -290,29 +309,236 @@ export default function App() {
     }
   }, [activeRevisionId]);
 
+  // Seamless migration of existing data to a local project structure on mount
   useEffect(() => {
+    let list = [...projectsList];
+    let activeId = currentProjectId;
+    let updated = false;
+
+    if (list.length === 0) {
+      const defaultProj: LocalProject = {
+        id: "default_project",
+        title: settings.title || "Ebook Padrão",
+        settings: settings,
+        blocks: blocks,
+        contentRevisions: contentRevisions,
+        updatedAt: new Date().toLocaleString("pt-BR")
+      };
+
+      list = [defaultProj];
+      activeId = "default_project";
+      updated = true;
+    }
+
+    if (updated) {
+      setProjectsList(list);
+      setCurrentProjectId(activeId);
+      try {
+        localStorage.setItem("ebook_projects_list", JSON.stringify(list));
+        localStorage.setItem("ebook_current_project_id", activeId);
+      } catch (e) {
+        console.error("Failed to migrate initial project:", e);
+      }
+    }
+  }, []);
+
+  // Unify auto-saving of active project's state to local storage and projects list
+  useEffect(() => {
+    if (!currentProjectId) return;
+
+    setProjectsList(prevList => {
+      const exists = prevList.some(p => p.id === currentProjectId);
+      let updatedList = [...prevList];
+
+      if (exists) {
+        updatedList = prevList.map(p => {
+          if (p.id === currentProjectId) {
+            const nextTitle = settings.title || p.title || "Sem título";
+            // Check if actual differences exist to prevent redundant updates
+            if (
+              p.title !== nextTitle ||
+              JSON.stringify(p.settings) !== JSON.stringify(settings) ||
+              JSON.stringify(p.blocks) !== JSON.stringify(blocks) ||
+              JSON.stringify(p.contentRevisions) !== JSON.stringify(contentRevisions)
+            ) {
+              return {
+                ...p,
+                title: nextTitle,
+                settings,
+                blocks,
+                contentRevisions,
+                updatedAt: new Date().toLocaleString("pt-BR")
+              };
+            }
+          }
+          return p;
+        });
+      } else {
+        updatedList.push({
+          id: currentProjectId,
+          title: settings.title || "Ebook Padrão",
+          settings,
+          blocks,
+          contentRevisions,
+          updatedAt: new Date().toLocaleString("pt-BR")
+        });
+      }
+
+      if (JSON.stringify(prevList) !== JSON.stringify(updatedList)) {
+        try {
+          localStorage.setItem("ebook_projects_list", JSON.stringify(updatedList));
+        } catch (e) {
+          console.error("Failed to save projects list to localStorage:", e);
+        }
+        return updatedList;
+      }
+      return prevList;
+    });
+
     try {
       localStorage.setItem("ebook_layout_settings", JSON.stringify(settings));
-    } catch (e) {
-      console.error("Failed to save ebook_layout_settings to localStorage:", e);
-    }
-  }, [settings]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem("ebook_layout_blocks", JSON.stringify(blocks));
-    } catch (e) {
-      console.error("Failed to save ebook_layout_blocks to localStorage:", e);
-    }
-  }, [blocks]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem("ebook_content_revisions", JSON.stringify(contentRevisions));
+      localStorage.setItem("ebook_current_project_id", currentProjectId);
     } catch (e) {
-      console.error("Failed to save ebook_content_revisions to localStorage:", e);
+      console.error("Erro ao salvar dados do projeto ativo:", e);
     }
-  }, [contentRevisions]);
+  }, [settings, blocks, contentRevisions, currentProjectId]);
+
+  // Project operation helpers
+  const createNewProject = (title: string = "") => {
+    const newId = safeUUID();
+    const finalTitle = title.trim() || `E-book ${projectsList.length + 1}`;
+    
+    const newProject: LocalProject = {
+      id: newId,
+      title: finalTitle,
+      settings: {
+        ...settings, // Herda as definições visuais, marca e dados do autor globais do projeto ativo
+        title: finalTitle,
+        shortTitle: finalTitle.substring(0, 20),
+        subtitle: "", // Inicia com o subtítulo em branco para o novo livro
+      },
+      blocks: [
+        {
+          id: safeUUID(),
+          filename: "Introdução",
+          content: "# Introdução\n\nComece a escrever o conteúdo do seu novo e-book aqui...",
+          originalContent: "",
+          isEdited: false,
+        }
+      ],
+      contentRevisions: [],
+      updatedAt: new Date().toLocaleString("pt-BR")
+    };
+
+    const updatedList = [...projectsList, newProject];
+    setProjectsList(updatedList);
+    try {
+      localStorage.setItem("ebook_projects_list", JSON.stringify(updatedList));
+    } catch (e) {
+      console.error("Failed to create new project:", e);
+    }
+
+    setCurrentProjectId(newId);
+    setSettings(newProject.settings);
+    setBlocks(newProject.blocks);
+    setContentRevisions([]);
+    setActiveTab("content");
+    
+    showToast(`Projeto "${finalTitle}" criado com sucesso!`, "success");
+  };
+
+  const switchProject = (projectId: string) => {
+    const proj = projectsList.find(p => p.id === projectId);
+    if (!proj) {
+      showToast("Projeto não encontrado.", "error");
+      return;
+    }
+
+    const savedList = projectsList.map(p => {
+      if (p.id === currentProjectId) {
+        return {
+          ...p,
+          title: settings.title || p.title,
+          settings,
+          blocks,
+          contentRevisions,
+          updatedAt: new Date().toLocaleString("pt-BR")
+        };
+      }
+      return p;
+    });
+    setProjectsList(savedList);
+    try {
+      localStorage.setItem("ebook_projects_list", JSON.stringify(savedList));
+    } catch (e) {
+      console.error("Failed to save state during switch:", e);
+    }
+
+    setCurrentProjectId(projectId);
+    setSettings(proj.settings);
+    setBlocks(proj.blocks);
+    setContentRevisions(proj.contentRevisions || []);
+    
+    showToast(`Carregado: "${proj.title}"`, "success");
+  };
+
+  const renameProject = (projectId: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    
+    const updatedList = projectsList.map(p => {
+      if (p.id === projectId) {
+        const nextSettings = p.id === currentProjectId ? { ...settings, title: newTitle } : { ...p.settings, title: newTitle };
+        if (p.id === currentProjectId) {
+          setSettings(nextSettings);
+        }
+        return {
+          ...p,
+          title: newTitle,
+          settings: nextSettings,
+          updatedAt: new Date().toLocaleString("pt-BR")
+        };
+      }
+      return p;
+    });
+
+    setProjectsList(updatedList);
+    try {
+      localStorage.setItem("ebook_projects_list", JSON.stringify(updatedList));
+    } catch (e) {
+      console.error("Failed to rename project:", e);
+    }
+    showToast("Projeto renomeado!", "success");
+  };
+
+  const deleteProject = (projectId: string) => {
+    if (projectsList.length <= 1) {
+      showToast("Você precisa ter pelo menos um projeto ativo.", "error");
+      return;
+    }
+
+    const projToDelete = projectsList.find(p => p.id === projectId);
+    if (!confirm(`Deseja realmente excluir o projeto "${projToDelete?.title || "este e-book"}" localmente? Esta ação não pode ser desfeita.`)) return;
+
+    const updatedList = projectsList.filter(p => p.id !== projectId);
+    setProjectsList(updatedList);
+    try {
+      localStorage.setItem("ebook_projects_list", JSON.stringify(updatedList));
+    } catch (e) {
+      console.error("Failed to delete project:", e);
+    }
+
+    if (currentProjectId === projectId) {
+      const remainingProj = updatedList[0];
+      setCurrentProjectId(remainingProj.id);
+      setSettings(remainingProj.settings);
+      setBlocks(remainingProj.blocks);
+      setContentRevisions(remainingProj.contentRevisions || []);
+    }
+
+    showToast("Projeto excluído localmente.", "success");
+  };
 
   // Intercept Close/Reload attempts and handle tab visibility to keep PDF export active
   useEffect(() => {
@@ -362,7 +588,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.120";
+  const buildVersionStr = "v1.4.122";
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -1281,6 +1507,16 @@ export default function App() {
               </span>
             </div>
           </div>
+
+          {/* Project Manager Selector */}
+          <ProjectManager
+            projectsList={projectsList}
+            currentProjectId={currentProjectId}
+            onSwitchProject={switchProject}
+            onCreateProject={createNewProject}
+            onRenameProject={renameProject}
+            onDeleteProject={deleteProject}
+          />
 
           {/* TAB SYSTEM (Compact and organized) */}
           <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200/50">
