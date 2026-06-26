@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Download } from 'lucide-react';
 import { ProjectSettings } from '../types';
 
 interface VisualSettingsPanelProps {
@@ -73,6 +74,61 @@ export function VisualSettingsPanel({ settings, setSettings, onApply, onRestoreD
 
   const handleColorChange = (key: keyof ProjectSettings, value: string) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleDownloadMarkdown = () => {
+    const mdContent = `# ESPECIFICAÇÕES DE LAYOUT (HANDOFF)
+
+Este arquivo foi gerado automaticamente com as configurações visuais e metadados personalizados do e-book.
+Você pode carregar este arquivo de volta na aba "Definições Visuais" para restaurar o design.
+
+## Opções Visuais de Layout
+- Modo de Distribuição: ${localSettings.densityMode || 'comfortable'}
+- Gerar Sumário: ${localSettings.generateToc !== false ? 'sim' : 'não'}
+- Borda da Página: ${localSettings.pageBorder ? 'sim' : 'não'}
+- Cabeçalho: ${localSettings.headerText || ''}
+- Cabeçalho Descritivo: ${localSettings.descriptiveHeader ? 'sim' : 'não'}
+- Rodapé: ${localSettings.footerText || ''}
+- Alinhamento do Cabeçalho: ${localSettings.headerStyle || 'left'}
+- Alinhamento do Rodapé: ${localSettings.footerStyle || 'left'}
+- Numeração de Página: ${localSettings.pageNumberStyle || 'right'}
+
+## Cores do Tema
+| Elemento | Cor Hexadecimal |
+| :--- | :--- |
+| Cor Primária | ${localSettings.primaryColor || '#245C5A'} |
+| Cor Secundária | ${localSettings.secondaryColor || '#C9826B'} |
+| Cor de Destaque | ${localSettings.accentColor || '#6F8F9A'} |
+| Cor de Fundo | ${localSettings.backgroundColor || '#FAF8F4'} |
+| Cor do Texto | ${localSettings.textColor || '#2F3437'} |
+
+## Tipografia do Tema
+- Fonte Primária (Tipografia Títulos): ${localSettings.fontDisplay || 'Poppins'}
+- Fonte Secundária (Tipografia Corpo): ${localSettings.fontFamily || 'Inter'}
+
+## Metadados do E-book
+- Marca: ${localSettings.brand || ''}
+- Autor: ${localSettings.professionalName || ''}
+- Título Profissional: ${localSettings.professionalTitle || ''}
+- Registro: ${localSettings.professionalReg || ''}
+- Site: ${localSettings.website || ''}
+- Instagram: ${localSettings.instagram || ''}
+- E-mail: ${localSettings.email || ''}
+- WhatsApp: ${localSettings.whatsapp || ''}
+- URL Agendamento: ${localSettings.schedulingUrl || ''}
+- Endereço: ${localSettings.contactAddress || ''}
+- Etiqueta da Capa: ${localSettings.coverBadgeText || 'E-book educativo'}
+${localSettings.coverImageUrl ? `- Imagem de Capa: ${localSettings.coverImageUrl}\n` : ''}
+`;
+
+    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const fileName = `especificacoes-visuais-${(localSettings.title || 'ebook').toLowerCase().replace(/\s+/g, '-')}.md`;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -284,6 +340,13 @@ export function VisualSettingsPanel({ settings, setSettings, onApply, onRestoreD
           className="bg-[#245C5A] hover:bg-[#1b4342] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors flex-1 min-w-[200px]"
         >
           Salvar e Aplicar ao Preview
+        </button>
+        <button 
+          onClick={handleDownloadMarkdown}
+          className="bg-[#F4EFE7] hover:bg-[#ebdcc3] text-[#245C5A] border border-[#C9D8D5] px-5 py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 flex-1 min-w-[200px]"
+        >
+          <Download size={16} />
+          Baixar Especificações (.md)
         </button>
         <button 
           onClick={onRestoreDefault}
