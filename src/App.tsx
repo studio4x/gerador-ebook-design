@@ -42,7 +42,7 @@ import {
 import { ProjectManager } from "./components/ProjectManager";
 import { CloudSync } from "./components/CloudSync";
 import { auth } from "./lib/firebase";
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User as FirebaseUser } from "firebase/auth";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 
 function safeUUID(): string {
   if (typeof window !== "undefined" && window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -157,7 +157,7 @@ export default function App() {
   const [reprocessTrigger, setReprocessTrigger] = useState(0);
 
   // Authentication and automated emailing states
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [shouldEmailEpub, setShouldEmailEpub] = useState(true);
   const [isSendingEpubEmail, setIsSendingEpubEmail] = useState(false);
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
@@ -167,10 +167,20 @@ export default function App() {
 
   // Sync auth state
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    let active = true;
+
+    auth.getSession().then(({ data: { session } }) => {
+      if (active) setUser(session?.user ?? null);
     });
-    return () => unsub();
+
+    const { data: { subscription } } = auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // SMTP testing helper
@@ -2108,16 +2118,20 @@ export default function App() {
                       <button
                         onClick={async () => {
                           try {
-                            const provider = new GoogleAuthProvider();
-                            await signInWithPopup(auth, provider);
-                            showToast("Logado com sucesso!", "success");
+                            const { error } = await auth.signInWithOAuth({
+                              provider: "google",
+                              options: {
+                                redirectTo: window.location.origin,
+                              },
+                            });
+                            if (error) throw error;
                           } catch (err: any) {
                             showToast("Erro ao fazer login: " + err.message, "error");
                           }
                         }}
                         className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 hover:border-[#245C5A] rounded-lg transition-all cursor-pointer shadow-2xs shrink-0 select-none"
                       >
-                        <LogIn size={13} className="text-[#245C5A]" /> Entrar e Ativar E-mail
+                        <LogIn size={13} className="text-[#245C5A]" /> Entrar com Google
                       </button>
                     </div>
                   )}

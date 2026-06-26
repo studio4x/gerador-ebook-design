@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { auth } from "../lib/firebase";
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from "firebase/auth";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 import { Cloud, LogIn, LogOut, Save, DownloadCloud, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { ContentBlock, ProjectSettings } from "../types";
 import {
@@ -47,7 +47,7 @@ export function CloudSync({
   setBlocks: (b: ContentBlock[]) => void;
   showToast: (msg: string, type: "success" | "error" | "info") => void;
 }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"Salvando..." | "Salvo" | "">("");
@@ -79,14 +79,26 @@ export function CloudSync({
   };
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsub();
+    let active = true;
+
+    auth.getSession().then(({ data: { session } }) => {
+      if (active) setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadCloudProjects = async () => {
     if (!user) return;
     try {
-      setCloudProjects(await listCloudProjects(user.uid));
+      setCloudProjects(await listCloudProjects(user.id));
     } catch (err) {
       showToast("Erro ao carregar projetos da nuvem.", "error");
     }
@@ -95,7 +107,7 @@ export function CloudSync({
   const findProjectByNormalizedTitle = async (normalizedTitle: string, excludeId?: string): Promise<CloudProject | null> => {
     if (!user) return null;
     try {
-      const projects = await listCloudProjects(user.uid);
+      const projects = await listCloudProjects(user.id);
       return projects.find((project) => project.normalized_title === normalizedTitle && project.id !== excludeId) || null;
     } catch {
       return null;
@@ -104,15 +116,20 @@ export function CloudSync({
 
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-      showToast("Logado com sucesso!", "success");
+      const { error } = await auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) throw error;
     } catch (err: any) {
       showToast("Erro ao fazer login: " + (err?.message || err), "error");
     }
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await auth.signOut();
     setCurrentCloudProject(null);
     showToast("Você saiu da conta.", "info");
   };
@@ -130,18 +147,18 @@ export function CloudSync({
     try {
       const displayTitle = (currentProjectName || settings.title || "Ebook").trim();
       const normalizedTitle = normalizeProjectTitle(displayTitle);
-      let projectId = currentProjectId || `${user.uid}_${normalizedTitle}`;
+      let projectId = currentProjectId || `${user.id}_${normalizedTitle}`;
 
       if (!currentProjectId) {
         const duplicate = await findProjectByNormalizedTitle(normalizedTitle);
         if (duplicate) projectId = duplicate.id;
       }
 
-      const existing = await loadCloudProject(user.uid, projectId).catch(() => null);
+      const existing = await loadCloudProject(user.id, projectId).catch(() => null);
       const nextVersion = Math.max(existing?.version || 0, currentProjectVersion || 0) + 1;
 
       const saved = await saveCloudProject({
-        userId: user.uid,
+        userId: user.id,
         email: user.email,
         projectId,
         title: displayTitle,
@@ -179,7 +196,7 @@ export function CloudSync({
 
   const loadFromCloud = async (projectId: string) => {
     try {
-      const data = user ? await loadCloudProject(user.uid, projectId) : null;
+      const data = user ? await loadCloudProject(user.id, projectId) : null;
       if (!data) {
         showToast("Projeto não encontrado na nuvem.", "error");
         return;
@@ -216,7 +233,7 @@ export function CloudSync({
 
     try {
       const saved = await renameCloudProject({
-        userId: user.uid,
+        userId: user.id,
         projectId: proj.id,
         title: nextTitle,
         normalizedTitle,
@@ -241,7 +258,7 @@ export function CloudSync({
     if (!confirmed) return;
 
     try {
-      await apiDeleteCloudProject({ userId: user!.uid, projectId: proj.id });
+      await apiDeleteCloudProject({ userId: user!.id, projectId: proj.id });
       if (currentProjectId === proj.id) {
         setCurrentCloudProject(null);
       }
