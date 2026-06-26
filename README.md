@@ -25,3 +25,6 @@ Cloud sync now uses Supabase through the server API.
 
 1. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in [.env.local](.env.local)
 2. Apply the SQL migration at [supabase/migrations/20260626_create_ebooks_table.sql](supabase/migrations/20260626_create_ebooks_table.sql)
+3. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_APP_URL` in [.env.local](.env.local)
+4. Enable Google Auth in the Supabase dashboard
+5. Add the redirect URLs used by the app, including `http://localhost:3000` for local development and the production app URL in `VITE_APP_URL`

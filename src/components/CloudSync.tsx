@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { auth } from "../lib/firebase";
+import { auth, signInWithGoogle } from "../lib/firebase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { Cloud, LogIn, LogOut, Save, DownloadCloud, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { ContentBlock, ProjectSettings } from "../types";
@@ -116,12 +116,7 @@ export function CloudSync({
 
   const handleLogin = async () => {
     try {
-      const { error } = await auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
+      const { error } = await signInWithGoogle();
       if (error) throw error;
     } catch (err: any) {
       showToast("Erro ao fazer login: " + (err?.message || err), "error");

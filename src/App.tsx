@@ -41,7 +41,7 @@ import {
 // Import ProjectManager, CloudSync & Firebase Auth
 import { ProjectManager } from "./components/ProjectManager";
 import { CloudSync } from "./components/CloudSync";
-import { auth } from "./lib/firebase";
+import { auth, signInWithGoogle } from "./lib/firebase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 
 function safeUUID(): string {
@@ -2118,12 +2118,7 @@ export default function App() {
                       <button
                         onClick={async () => {
                           try {
-                            const { error } = await auth.signInWithOAuth({
-                              provider: "google",
-                              options: {
-                                redirectTo: window.location.origin,
-                              },
-                            });
+                            const { error } = await signInWithGoogle();
                             if (error) throw error;
                           } catch (err: any) {
                             showToast("Erro ao fazer login: " + err.message, "error");
