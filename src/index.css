@@ -345,3 +345,98 @@ h1, h2, h3, h4, h5 {
   clear: both !important;
   pointer-events: none;
 }
+
+/* Custom Checkboxes / Checklists styling */
+.checklist-item {
+  display: grid !important;
+  grid-template-columns: 18px 1fr !important;
+  column-gap: 10px !important;
+  align-items: start !important;
+  margin: 6px 0 9px 0 !important;
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+.checklist-box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--color-brand-petroleo, #245C5A) !important;
+  border-radius: 2px !important;
+  margin-top: 5px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  background-color: transparent !important;
+}
+
+.checklist-text {
+  font-size: var(--ebook-body-size, 11pt) !important;
+  line-height: 1.45 !important;
+  color: var(--color-brand-grafite, #2F3437) !important;
+  text-align: left !important;
+  text-indent: 0 !important;
+  margin: 0 !important;
+}
+
+/* Custom fillable lines styling */
+.fill-line {
+  display: block !important;
+  width: 100% !important;
+  min-height: 22px !important;
+  border-bottom: 0.7pt solid var(--color-brand-linha, #C9D8D5) !important;
+  margin: 4px 0 12px 0 !important;
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+  break-before: avoid !important;
+  page-break-before: avoid !important;
+}
+
+/* Inline or general markdown table styling */
+.markdown-table {
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+  margin: 16px 0 20px 0 !important;
+  font-size: 9.5pt !important;
+  color: var(--color-brand-grafite, #2F3437) !important;
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+  box-sizing: border-box !important;
+}
+
+.markdown-table th {
+  background-color: var(--color-brand-informativo, #DDE8E5) !important;
+  color: var(--color-brand-petroleo, #245C5A) !important;
+  font-family: var(--font-sans) !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+  padding: 8px !important;
+  border: 0.7pt solid var(--color-brand-linha, #C9D8D5) !important;
+  vertical-align: top !important;
+}
+
+.markdown-table td {
+  background-color: var(--color-brand-offwhite, #FAF8F4) !important;
+  padding: 8px !important;
+  border: 0.7pt solid var(--color-brand-linha, #C9D8D5) !important;
+  vertical-align: top !important;
+  min-height: 32px !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+
+/* Wide tables (5+ columns) optimization */
+.markdown-table.wide-table {
+  font-size: 8.5pt !important;
+}
+
+.markdown-table.wide-table th,
+.markdown-table.wide-table td {
+  padding: 6px 4px !important;
+}
+
+/* Prevent orphan content after headers and labels */
+h1, h2, h3, h4, h5, h6, .exemplo-label {
+  break-after: avoid-page !important;
+  page-break-after: avoid !important;
+}

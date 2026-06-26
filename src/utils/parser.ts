@@ -17,6 +17,23 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
 
   let mergedMarkdown = cleanedContents.join('\n\n<!-- block-separator -->\n\n');
 
+  // Convert checklists: match optional list bullet followed by [ ]
+  mergedMarkdown = mergedMarkdown.split('\n').map(line => {
+    const match = line.match(/^\s*(?:[-*]\s+)?\[\s*\]\s*(.*)$/i);
+    if (match) {
+      return `<div class="checklist-item"><div class="checklist-box"></div><div class="checklist-text">${match[1]}</div></div>`;
+    }
+    return line;
+  }).join('\n');
+
+  // Convert underscores (4 or more) representing fillable lines
+  mergedMarkdown = mergedMarkdown.split('\n').map(line => {
+    if (/^\s*_{4,}\s*$/.test(line)) {
+      return '<div class="fill-line"></div>';
+    }
+    return line.replace(/_{4,}/g, '<span class="fill-line"></span>');
+  }).join('\n');
+
   // Hardcoded fixes for specific typos in the original content
   mergedMarkdown = mergedMarkdown.replace(
     /corrigir a pessoa ou encaix[aá]-?la em um padrão/gi,
@@ -212,7 +229,108 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     }
   });
 
+  // Style tables and handle wide tables (5+ columns)
+  const tables = doc.querySelectorAll('table');
+  tables.forEach((table) => {
+    table.classList.add('markdown-table');
+    const headers = table.querySelectorAll('th');
+    if (headers.length >= 5) {
+      table.classList.add('wide-table');
+    }
+  });
+
+  // Extract metadata to identify fields to remove at the start of the book
+  const metadata = extractMetadataFromContent(blocks);
+
+  // Remove leading metadata elements that repeat cover/title page details
+  let currentChild = doc.body.firstElementChild;
+  while (currentChild) {
+    const nextChild = currentChild.nextElementSibling;
+    const tagName = currentChild.tagName.toLowerCase();
+    const textContent = currentChild.textContent || '';
+    const textLower = textContent.toLowerCase().trim();
+
+    // Stop conditions
+    if (currentChild.classList.contains('chapter-opener') || textLower.startsWith('capítulo') || textLower.startsWith('capitulo') || textLower.startsWith('chapter')) {
+      break;
+    }
+    if (['table', 'ul', 'ol', 'blockquote'].includes(tagName) || currentChild.classList.contains('frase-central')) {
+      break;
+    }
+    if (currentChild.classList.contains('checklist-item') || currentChild.classList.contains('fill-line')) {
+      break;
+    }
+    if (textContent.length > 200) {
+      break;
+    }
+
+    if (isMetadataElement(textContent, metadata)) {
+      currentChild.remove();
+    } else {
+      break;
+    }
+
+    currentChild = nextChild;
+  }
+
   return doc.body.innerHTML;
+}
+
+function isMetadataElement(text: string, metadata: Partial<ProjectSettings>): boolean {
+  const normText = text.toLowerCase().trim();
+  if (!normText) return true; // empty elements can be skipped/removed
+
+  const clean = (s?: string) => {
+    if (!s) return '';
+    return s.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // remove accents
+      .replace(/[^a-z0-9]/g, ''); // alphanumeric only
+  };
+
+  const cleanText = clean(normText);
+  if (!cleanText) return true;
+
+  const fieldsToCheck = [
+    metadata.title,
+    metadata.subtitle,
+    metadata.professionalName,
+    metadata.professionalTitle,
+    metadata.professionalReg,
+    metadata.brand,
+    metadata.website,
+    metadata.materialType,
+  ];
+
+  for (const val of fieldsToCheck) {
+    if (!val) continue;
+    const cleanVal = clean(val);
+    if (cleanVal && (cleanText === cleanVal || cleanText.includes(cleanVal) || cleanVal.includes(cleanText))) {
+      return true;
+    }
+  }
+
+  const prefixes = [
+    'autora:', 'autor:', 'profissional:', 'credencial:', 'instituicao:', 'instituição:',
+    'website:', 'site:', 'tipo:', 'observacao:', 'observação:', 'warning:', 'aviso:',
+    'marca:', 'subtítulo:', 'subtitulo:', 'título:', 'titulo:'
+  ];
+  for (const pref of prefixes) {
+    if (normText.startsWith(pref)) {
+      const rest = normText.slice(pref.length).trim();
+      if (!rest) return true;
+      const cleanRest = clean(rest);
+      for (const val of fieldsToCheck) {
+        if (!val) continue;
+        const cleanVal = clean(val);
+        if (cleanVal && (cleanRest === cleanVal || cleanRest.includes(cleanVal) || cleanVal.includes(cleanRest))) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 function wrapNextUntilHeading(startElement: Element, className: string) {
