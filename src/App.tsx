@@ -44,6 +44,11 @@ import { CloudSync } from "./components/CloudSync";
 import { auth, signInWithGoogle } from "./lib/firebase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 
+type PdfDownloadInfo = {
+  fileName: string;
+  markAsDownloaded: () => void;
+};
+
 function safeUUID(): string {
   if (typeof window !== "undefined" && window.crypto && typeof window.crypto.randomUUID === "function") {
     return window.crypto.randomUUID();
@@ -598,7 +603,116 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.132";
+  const buildVersionStr = "v1.4.133";
+
+  const getPdfDownloadInfo = (): PdfDownloadInfo => {
+    const rawTitle = settings.title || "Ebook";
+
+    const removeAccents = (value: string): string => {
+      return value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[çÇ]/g, (match) => (match === "ç" ? "c" : "C"));
+    };
+
+    const sanitizeFilename = (title: string): string => {
+      const base = removeAccents(title);
+      return base
+        .replace(/[\\\/:\*\?"<>|]/g, "")
+        .trim();
+    };
+
+    const baseFilename = sanitizeFilename(rawTitle) || "Ebook";
+    const storageKey = `ebook_export_version_${baseFilename.toLowerCase()}`;
+    const currentVersionStr = localStorage.getItem(storageKey);
+    const version = currentVersionStr ? parseInt(currentVersionStr, 10) : 1;
+
+    return {
+      fileName: `${baseFilename}_v${version}.pdf`,
+      markAsDownloaded: () => {
+        localStorage.setItem(storageKey, String(version + 1));
+      },
+    };
+  };
+
+  const downloadBlobAsFile = (blob: Blob, fileName: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportPdfInBrowser = async (container: HTMLElement, backgroundColor: string): Promise<Blob> => {
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]);
+
+    const renderRoot = container.cloneNode(true) as HTMLElement;
+    renderRoot.removeAttribute("id");
+    renderRoot.removeAttribute("aria-hidden");
+    renderRoot.classList.remove("no-print");
+    renderRoot.style.position = "static";
+    renderRoot.style.opacity = "1";
+    renderRoot.style.pointerEvents = "auto";
+    renderRoot.style.zIndex = "auto";
+
+    const sandbox = document.createElement("div");
+    sandbox.style.position = "fixed";
+    sandbox.style.left = "-200vw";
+    sandbox.style.top = "0";
+    sandbox.style.width = "210mm";
+    sandbox.style.opacity = "1";
+    sandbox.style.pointerEvents = "none";
+    sandbox.style.background = backgroundColor;
+    sandbox.appendChild(renderRoot);
+    document.body.appendChild(sandbox);
+
+    try {
+      if ("fonts" in document) {
+        await document.fonts.ready;
+      }
+
+      const pages = Array.from(sandbox.querySelectorAll(".page")) as HTMLElement[];
+      if (pages.length === 0) {
+        throw new Error("Nenhuma página renderizada para exportação.");
+      }
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const renderScale = Math.min(Math.max(window.devicePixelRatio || 2, 2), 3);
+
+      for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+        const pageEl = pages[pageIndex];
+        const canvas = await html2canvas(pageEl, {
+          backgroundColor,
+          scale: renderScale,
+          useCORS: true,
+          logging: false,
+        });
+
+        if (pageIndex > 0) {
+          pdf.addPage("a4", "portrait");
+        }
+
+        const imageData = canvas.toDataURL("image/png");
+        pdf.addImage(imageData, "PNG", 0, 0, 210, 297, undefined, "FAST");
+      }
+
+      return pdf.output("blob");
+    } finally {
+      sandbox.remove();
+    }
+  };
 
   // 1. Extract content metadata when blocks change, guarding against infinite loops with a 500ms debounce
   useEffect(() => {
@@ -1257,7 +1371,7 @@ export default function App() {
     }
 
     setIsExportingPdf(true);
-    showToast("Gerando PDF real de alta fidelidade via servidor... Aguarde um momento.", "info");
+    showToast("Gerando PDF de alta fidelidade... Aguarde um momento.", "info");
 
     try {
       // Calculate active layout values based on densityMode to feed static styles
@@ -1434,62 +1548,56 @@ export default function App() {
       clone.classList.remove("no-print");
       const htmlContent = clone.outerHTML;
 
-      const response = await fetch("/api/export-pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          html: htmlContent, 
-          css: finalCss,
-          fontFamily: settings.fontFamily,
-          fontDisplay: settings.fontDisplay
-        })
-      });
+      const pdfDownload = getPdfDownloadInfo();
+      let pdfBlob: Blob;
+      let usedBrowserFallback = false;
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || "Erro no servidor ao gerar PDF");
+      try {
+        const response = await fetch("/api/export-pdf", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            html: htmlContent,
+            css: finalCss,
+            fontFamily: settings.fontFamily,
+            fontDisplay: settings.fontDisplay
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          const error = new Error(errData.error || "Erro no servidor ao gerar PDF") as Error & { status?: number };
+          error.status = response.status;
+          throw error;
+        }
+
+        pdfBlob = await response.blob();
+      } catch (err: any) {
+        const status = typeof err?.status === "number" ? err.status : undefined;
+        const shouldUseBrowserFallback =
+          err instanceof TypeError ||
+          status === 404 ||
+          (typeof status === "number" && status >= 500);
+
+        if (!shouldUseBrowserFallback) {
+          throw err;
+        }
+
+        usedBrowserFallback = true;
+        showToast("Servidor de PDF indisponível neste ambiente. Gerando o PDF localmente no navegador...", "info");
+        pdfBlob = await exportPdfInBrowser(container, bgColor);
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const rawTitle = settings.title || "Ebook";
-      
-      const removeAccents = (str: string): string => {
-        return str
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/[çÇ]/g, (match) => match === 'ç' ? 'c' : 'C');
-      };
-
-      const sanitizeFilename = (title: string): string => {
-        const base = removeAccents(title);
-        return base
-          .replace(/[\\\/:\*\?"<>|]/g, "")
-          .trim();
-      };
-
-      const baseFilename = sanitizeFilename(rawTitle) || "Ebook";
-
-      const storageKey = `ebook_export_version_${baseFilename.toLowerCase()}`;
-      const currentVersionStr = localStorage.getItem(storageKey);
-      const version = currentVersionStr ? parseInt(currentVersionStr, 10) : 1;
-
-      localStorage.setItem(storageKey, String(version + 1));
-
-      const pdfFileName = `${baseFilename}_v${version}.pdf`;
-      
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = pdfFileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-
-      showToast("PDF gerado com sucesso para download!", "success");
+      downloadBlobAsFile(pdfBlob, pdfDownload.fileName);
+      pdfDownload.markAsDownloaded();
+      showToast(
+        usedBrowserFallback
+          ? "PDF gerado localmente no navegador e enviado para download."
+          : "PDF gerado com sucesso para download!",
+        "success"
+      );
 
     } catch (err: any) {
       console.error(err);
