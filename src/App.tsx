@@ -603,7 +603,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.134";
+  const buildVersionStr = "v1.4.135";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     const rawTitle = settings.title || "Ebook";
@@ -646,6 +646,58 @@ export default function App() {
     window.URL.revokeObjectURL(url);
   };
 
+  const sanitizeCssValueForCanvas = (value: string) => {
+    if (!value) return value;
+
+    let sanitized = value;
+
+    if (sanitized.includes("oklch(")) {
+      sanitized = resolveOklchToHsla(sanitized);
+    }
+
+    if (sanitized.includes("color-mix(") || sanitized.includes("oklab(")) {
+      return "";
+    }
+
+    return sanitized;
+  };
+
+  const inlineComputedStylesForCanvas = (source: Element, target: Element) => {
+    if (!(source instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const computed = window.getComputedStyle(source);
+
+    for (const propertyName of Array.from(computed)) {
+      if (propertyName.startsWith("--")) continue;
+
+      const rawValue = computed.getPropertyValue(propertyName);
+      const value = sanitizeCssValueForCanvas(rawValue);
+      if (!value) continue;
+
+      try {
+        target.style.setProperty(propertyName, value, computed.getPropertyPriority(propertyName));
+      } catch (error) {
+        // Ignore properties rejected by the browser when re-applied inline.
+      }
+    }
+
+    target.removeAttribute("class");
+    target.removeAttribute("id");
+
+    const sourceChildren = Array.from(source.children);
+    const targetChildren = Array.from(target.children);
+
+    for (let index = 0; index < sourceChildren.length; index += 1) {
+      const sourceChild = sourceChildren[index];
+      const targetChild = targetChildren[index];
+      if (sourceChild && targetChild) {
+        inlineComputedStylesForCanvas(sourceChild, targetChild);
+      }
+    }
+  };
+
   const exportPdfInBrowser = async (container: HTMLElement, backgroundColor: string): Promise<Blob> => {
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
       import("html2canvas"),
@@ -673,6 +725,8 @@ export default function App() {
     document.body.appendChild(sandbox);
 
     try {
+      inlineComputedStylesForCanvas(container, renderRoot);
+
       if ("fonts" in document) {
         await document.fonts.ready;
       }
