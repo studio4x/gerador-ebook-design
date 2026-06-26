@@ -14,6 +14,7 @@ async function startServer() {
     const { exec } = await import("child_process");
     
     const possibleRoots = [
+      path.join(process.cwd(), ".cache"),
       path.join(process.cwd(), ".cache/puppeteer"),
       "/.cache/puppeteer",
       "/root/.cache/puppeteer",
@@ -99,6 +100,7 @@ async function startServer() {
       };
 
       const possibleRoots = [
+        path.join(process.cwd(), ".cache"),
         path.join(process.cwd(), ".cache/puppeteer"),
         "/.cache/puppeteer",
         "/root/.cache/puppeteer",
