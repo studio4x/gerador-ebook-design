@@ -603,7 +603,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.135";
+  const buildVersionStr = "v1.4.136";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     const rawTitle = settings.title || "Ebook";
@@ -705,6 +705,9 @@ export default function App() {
     ]);
 
     const renderRoot = container.cloneNode(true) as HTMLElement;
+    Array.from(renderRoot.querySelectorAll(".page")).forEach((pageEl, index) => {
+      pageEl.setAttribute("data-pdf-page", String(index));
+    });
     renderRoot.removeAttribute("id");
     renderRoot.removeAttribute("aria-hidden");
     renderRoot.classList.remove("no-print");
@@ -731,7 +734,7 @@ export default function App() {
         await document.fonts.ready;
       }
 
-      const pages = Array.from(sandbox.querySelectorAll(".page")) as HTMLElement[];
+      const pages = Array.from(sandbox.querySelectorAll("[data-pdf-page]")) as HTMLElement[];
       if (pages.length === 0) {
         throw new Error("Nenhuma página renderizada para exportação.");
       }
