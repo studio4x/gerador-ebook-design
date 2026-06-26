@@ -7,7 +7,43 @@ export class ServerApiUnavailableError extends Error {
 
 type ServerApiStatus = "unknown" | "available" | "unavailable";
 
-let serverApiStatus: ServerApiStatus = "unknown";
+const configuredServerApiBaseUrl = (
+  import.meta.env.VITE_SERVER_API_BASE_URL as string | undefined
+)?.trim().replace(/\/+$/, "");
+
+function shouldAssumeNoServerApi() {
+  if (configuredServerApiBaseUrl) return false;
+  if (typeof window === "undefined") return false;
+
+  const hostname = window.location.hostname.toLowerCase();
+  return hostname.endsWith(".vercel.app");
+}
+
+function resolveServerApiInput(input: RequestInfo | URL): RequestInfo | URL {
+  if (!configuredServerApiBaseUrl) {
+    return input;
+  }
+
+  if (typeof input === "string") {
+    if (input.startsWith("/")) {
+      return `${configuredServerApiBaseUrl}${input}`;
+    }
+    return input;
+  }
+
+  if (
+    typeof window !== "undefined" &&
+    input instanceof URL &&
+    input.origin === window.location.origin &&
+    input.pathname.startsWith("/")
+  ) {
+    return new URL(`${configuredServerApiBaseUrl}${input.pathname}${input.search}`);
+  }
+
+  return input;
+}
+
+let serverApiStatus: ServerApiStatus = shouldAssumeNoServerApi() ? "unavailable" : "unknown";
 
 export function getServerApiStatus(): ServerApiStatus {
   return serverApiStatus;
@@ -35,7 +71,7 @@ export async function fetchServerApi(input: RequestInfo | URL, init?: RequestIni
   }
 
   try {
-    const response = await fetch(input, init);
+    const response = await fetch(resolveServerApiInput(input), init);
 
     if (response.status === 404) {
       markServerApiUnavailable();

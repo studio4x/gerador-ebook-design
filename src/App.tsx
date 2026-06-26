@@ -604,7 +604,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.138";
+  const buildVersionStr = "v1.4.139";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     const rawTitle = settings.title || "Ebook";

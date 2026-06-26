@@ -41,6 +41,7 @@ O comando acima sobe o frontend Vite junto com o servidor Express definido em `s
 - `VITE_SUPABASE_URL`: URL pública para autenticação no cliente
 - `VITE_SUPABASE_ANON_KEY`: chave pública do Supabase
 - `VITE_APP_URL`: URL pública do app para redirecionamento OAuth
+- `VITE_SERVER_API_BASE_URL`: URL opcional de uma API externa quando o frontend estiver em um host estático sem `server.ts`
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: envio de e-mail
 
 Consulte o modelo em [.env.example](.env.example).
@@ -58,6 +59,7 @@ Consulte o modelo em [.env.example](.env.example).
 - A rota principal de exportação é `POST /api/export-pdf`, atendida por `server.ts`
 - Em ambientes onde `/api/export-pdf` não estiver disponível, o cliente possui fallback de geração local no navegador
 - Se houver `404` em `/api/export-pdf` ou `/api/cloud/projects`, o ambiente provavelmente está servindo apenas o frontend sem o backend Express
+- Em deploys estáticos como `*.vercel.app`, sem `VITE_SERVER_API_BASE_URL`, o app assume backend indisponível e evita tentar `/api/*`
 
 ## Publicação
 
