@@ -603,7 +603,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.136";
+  const buildVersionStr = "v1.4.137";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     const rawTitle = settings.title || "Ebook";
@@ -755,6 +755,11 @@ export default function App() {
           scale: renderScale,
           useCORS: true,
           logging: false,
+          onclone: (clonedDocument) => {
+            clonedDocument.querySelectorAll("style, link[rel='stylesheet']").forEach((node) => {
+              node.remove();
+            });
+          },
         });
 
         if (pageIndex > 0) {
