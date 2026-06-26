@@ -8,6 +8,59 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Pre-install/check chrome binary for puppeteer on startup
+  try {
+    const fs = await import("fs");
+    const { exec } = await import("child_process");
+    
+    const possibleRoots = [
+      path.join(process.cwd(), ".cache/puppeteer"),
+      "/.cache/puppeteer",
+      "/root/.cache/puppeteer",
+      "/www-data-home/.cache/puppeteer"
+    ];
+    
+    let chromeFound = false;
+    const searchChrome = (dir: string): boolean => {
+      try {
+        if (!fs.existsSync(dir)) return false;
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          const fullPath = path.join(dir, file);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            if (searchChrome(fullPath)) return true;
+          } else if (file === "chrome" || file === "chromium") {
+            return true;
+          }
+        }
+      } catch (e) {}
+      return false;
+    };
+    
+    for (const root of possibleRoots) {
+      if (searchChrome(root)) {
+        chromeFound = true;
+        break;
+      }
+    }
+    
+    if (!chromeFound) {
+      console.log("Puppeteer: Chrome not found on startup. Starting background install...");
+      exec("npx puppeteer browsers install chrome", (err, stdout, stderr) => {
+        if (err) {
+          console.error("Puppeteer startup background installation failed:", err);
+        } else {
+          console.log("Puppeteer startup background installation completed:", stdout);
+        }
+      });
+    } else {
+      console.log("Puppeteer: Chrome found on startup.");
+    }
+  } catch (startupCheckErr) {
+    console.error("Puppeteer startup check failed:", startupCheckErr);
+  }
+
   // Set limits for handling base64-encoded PDF & EPUB file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -58,6 +111,26 @@ async function startServer() {
           executablePath = found;
           console.log("Puppeteer: Found Chrome executable at:", executablePath);
           break;
+        }
+      }
+
+      if (!executablePath) {
+        console.log("Puppeteer: Chrome executable not found in standard paths. Attempting synchronous installation via npx...");
+        try {
+          const { execSync } = await import("child_process");
+          execSync("npx puppeteer browsers install chrome", { stdio: "inherit" });
+          
+          // Search again after installation
+          for (const root of possibleRoots) {
+            const found = searchChrome(root);
+            if (found) {
+              executablePath = found;
+              console.log("Puppeteer: Found Chrome executable after synchronous installation at:", executablePath);
+              break;
+            }
+          }
+        } catch (installError) {
+          console.error("Puppeteer: Synchronous chrome installation failed:", installError);
         }
       }
 
