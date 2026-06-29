@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "http";
-import { generatePdfBuffer, type PdfExportRequestPayload } from "../server/pdf-export-vercel";
+import { generatePdfBuffer, type PdfExportRequestPayload } from "../server/pdf-export-vercel.js";
 
 type VercelLikeRequest = IncomingMessage & {
   method?: string;

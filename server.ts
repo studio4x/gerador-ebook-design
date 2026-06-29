@@ -4,7 +4,7 @@ import path from "path";
 import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
 import { createServer as createViteServer } from "vite";
-import { generatePdfBuffer, type PdfExportRequestPayload } from "./server/pdf-export-local";
+import { generatePdfBuffer, type PdfExportRequestPayload } from "./server/pdf-export-local.js";
 
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 

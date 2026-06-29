@@ -1,6 +1,6 @@
 import chromium from "@sparticuz/chromium";
 import puppeteerCore from "puppeteer-core";
-import { renderPdfPage, type PdfExportRequestPayload } from "./pdf-export-shared";
+import { renderPdfPage, type PdfExportRequestPayload } from "./pdf-export-shared.js";
 
 export async function generatePdfBuffer(payload: PdfExportRequestPayload): Promise<Buffer> {
   const executablePath = await chromium.executablePath();

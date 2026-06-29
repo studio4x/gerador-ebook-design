@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import puppeteer from "puppeteer";
-import { renderPdfPage, type PdfExportRequestPayload } from "./pdf-export-shared";
+import { renderPdfPage, type PdfExportRequestPayload } from "./pdf-export-shared.js";
 
 const LOCAL_CHROME_ROOTS = [
   path.join(process.cwd(), ".cache"),
