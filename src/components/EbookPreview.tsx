@@ -711,31 +711,65 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   }, [activeContentPages]);
 
   // Adjust table of contents entries spacing by Density setting
-  const entriesPerPage = useMemo(() => {
-    if (settings.densityMode === 'compact') return 26;
-    if (settings.densityMode === 'premium') return 14;
-    return 20; // default (comfortable)
+  const tocLayoutProfile = useMemo(() => {
+    if (settings.densityMode === 'compact') {
+      return {
+        pageUnitCapacity: 29,
+        firstPageReservedUnits: 3.8,
+        charsPerLineByLevel: { 1: 34, 2: 42, 3: 50 },
+        baseUnitsByLevel: { 1: 1.45, 2: 1.05, 3: 0.9 },
+        extraLineUnits: 0.5,
+      };
+    }
+
+    if (settings.densityMode === 'premium') {
+      return {
+        pageUnitCapacity: 18,
+        firstPageReservedUnits: 4.2,
+        charsPerLineByLevel: { 1: 28, 2: 36, 3: 44 },
+        baseUnitsByLevel: { 1: 1.7, 2: 1.22, 3: 1.02 },
+        extraLineUnits: 0.62,
+      };
+    }
+
+    return {
+      pageUnitCapacity: 23,
+      firstPageReservedUnits: 3.9,
+      charsPerLineByLevel: { 1: 31, 2: 39, 3: 47 },
+      baseUnitsByLevel: { 1: 1.55, 2: 1.12, 3: 0.96 },
+      extraLineUnits: 0.56,
+    };
   }, [settings.densityMode]);
 
   const listSpacingClass = useMemo(() => {
     if (settings.densityMode === 'compact') return 'space-y-0.5';
-    if (settings.densityMode === 'premium') return 'space-y-2';
-    return 'space-y-1'; // comfortable default
+    if (settings.densityMode === 'premium') return 'space-y-1.5';
+    return 'space-y-0.5'; // comfortable default
   }, [settings.densityMode]);
 
   const linkPaddingClass = useMemo(() => {
     if (settings.densityMode === 'compact') return 'py-0.5';
-    if (settings.densityMode === 'premium') return 'py-1.5';
-    return 'py-1'; // comfortable default
+    if (settings.densityMode === 'premium') return 'py-1';
+    return 'py-0.5'; // comfortable default
   }, [settings.densityMode]);
 
   const linkLeadingClass = useMemo(() => {
     if (settings.densityMode === 'compact') return 'leading-tight';
     if (settings.densityMode === 'premium') return 'leading-relaxed';
-    return 'leading-snug'; // comfortable default
+    return 'leading-tight'; // comfortable default
   }, [settings.densityMode]);
 
-  // Group and paginate TOC raw entries to prevent page-breaking inside a chapter's list of sub-headings
+  const estimateTocEntryUnits = (entry: typeof rawTocEntries[number]) => {
+    const level = entry.level === 1 ? 1 : entry.level === 2 ? 2 : 3;
+    const charsPerLine = tocLayoutProfile.charsPerLineByLevel[level as 1 | 2 | 3];
+    const baseUnits = tocLayoutProfile.baseUnitsByLevel[level as 1 | 2 | 3];
+    const normalizedTitleLength = (entry.title || "").trim().length;
+    const lineCount = Math.max(1, Math.ceil(normalizedTitleLength / charsPerLine));
+    const wrapUnits = (lineCount - 1) * tocLayoutProfile.extraLineUnits;
+    return baseUnits + wrapUnits;
+  };
+
+  // Group and paginate TOC entries using estimated entry height so each page is filled as much as possible.
   const tocPagesRaw = useMemo(() => {
     if (!hasSumario) return [];
     if (rawTocEntries.length === 0) return [];
@@ -753,46 +787,106 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       }
     });
 
-    // 2. Distribute groups across pages trying to keep groups unbroken if possible
+    const getPageCapacity = (pageIndex: number) => {
+      if (pageIndex === 0) {
+        return Math.max(8, tocLayoutProfile.pageUnitCapacity - tocLayoutProfile.firstPageReservedUnits);
+      }
+      return tocLayoutProfile.pageUnitCapacity;
+    };
+
+    const getEntriesUnits = (entries: typeof rawTocEntries) => {
+      return entries.reduce((total, entry) => total + estimateTocEntryUnits(entry), 0);
+    };
+
+    const takeEntriesThatFit = (entries: typeof rawTocEntries, capacity: number, minEntries = 1) => {
+      const chunk: typeof rawTocEntries = [];
+      let used = 0;
+
+      for (const entry of entries) {
+        const units = estimateTocEntryUnits(entry);
+        if (chunk.length > 0 && used + units > capacity) break;
+        if (chunk.length === 0 && units > capacity) {
+          chunk.push(entry);
+          used += units;
+          break;
+        }
+
+        if (used + units <= capacity) {
+          chunk.push(entry);
+          used += units;
+        } else {
+          break;
+        }
+      }
+
+      if (chunk.length < minEntries) {
+        return [];
+      }
+
+      return chunk;
+    };
+
+    // 2. Distribute groups across pages, but allow partial splits when that meaningfully increases page fill.
     const pages: (typeof rawTocEntries)[] = [];
     let currentPage: typeof rawTocEntries = [];
+    let currentPageUnits = 0;
+
+    const flushCurrentPage = () => {
+      if (currentPage.length > 0) {
+        pages.push(currentPage);
+        currentPage = [];
+        currentPageUnits = 0;
+      }
+    };
     
     groups.forEach((group) => {
-      const isFirstPage = pages.length === 0;
-      // On page 0, the header block is present, so we slightly reduce the capacity to give more breathing room
-      const currentPageCapacity = isFirstPage ? Math.max(6, entriesPerPage - 6) : entriesPerPage;
+      let remainingEntries = [...group.entries];
 
-      if (currentPage.length + group.entries.length <= currentPageCapacity) {
-        currentPage.push(...group.entries);
-      } else {
-        if (currentPage.length > 0) {
-          pages.push(currentPage);
-          currentPage = [];
+      while (remainingEntries.length > 0) {
+        const pageCapacity = getPageCapacity(pages.length);
+        const remainingPageCapacity = pageCapacity - currentPageUnits;
+        const wholeGroupUnits = getEntriesUnits(remainingEntries);
+
+        if (currentPageUnits + wholeGroupUnits <= pageCapacity) {
+          currentPage.push(...remainingEntries);
+          currentPageUnits += wholeGroupUnits;
+          remainingEntries = [];
+          continue;
         }
-        
-        const nextIsFirstPage = pages.length === 0;
-        const nextPageCapacity = nextIsFirstPage ? Math.max(6, entriesPerPage - 6) : entriesPerPage;
-        
-        if (group.entries.length > nextPageCapacity) {
-          // If a single group is larger than a blank page can hold, we must slice it
-          let tempEntries = [...group.entries];
-          while (tempEntries.length > 0) {
-            const currentCapacity = (pages.length === 0) ? Math.max(6, entriesPerPage - 6) : entriesPerPage;
-            const chunk = tempEntries.splice(0, currentCapacity);
-            pages.push(chunk);
+
+        const minEntriesToStartChunk = remainingEntries.length > 1 ? 2 : 1;
+
+        if (currentPage.length > 0) {
+          const partialChunk = takeEntriesThatFit(remainingEntries, remainingPageCapacity, minEntriesToStartChunk);
+          if (partialChunk.length >= minEntriesToStartChunk) {
+            currentPage.push(...partialChunk);
+            currentPageUnits += getEntriesUnits(partialChunk);
+            remainingEntries = remainingEntries.slice(partialChunk.length);
           }
-        } else {
-          currentPage.push(...group.entries);
+
+          flushCurrentPage();
+          continue;
+        }
+
+        const freshPageChunk = takeEntriesThatFit(remainingEntries, pageCapacity, 1);
+        if (freshPageChunk.length === 0) {
+          break;
+        }
+
+        currentPage.push(...freshPageChunk);
+        currentPageUnits += getEntriesUnits(freshPageChunk);
+        remainingEntries = remainingEntries.slice(freshPageChunk.length);
+
+        if (remainingEntries.length > 0) {
+          flushCurrentPage();
         }
       }
     });
     
-    if (currentPage.length > 0) {
-      pages.push(currentPage);
-    }
+    flushCurrentPage();
     
     return pages;
-  }, [hasSumario, rawTocEntries, entriesPerPage]);
+  }, [hasSumario, rawTocEntries, tocLayoutProfile]);
 
   const numSumarioPages = useMemo(() => {
     if (!hasSumario) return 0;
@@ -1697,14 +1791,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                             
                             <div className="flex-grow">
                                {sIdx === 0 && (
-                                 <div className="mb-8 text-left border-b border-[#FAF8F4] pb-6">
+                                 <div className="mb-5 text-left border-b border-[#FAF8F4] pb-4">
                                    <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A] block mb-1">Índice Geral</span>
-                                   <h1 className="text-4xl font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
-                                   <div className="w-12 h-1 bg-[#C9826B] mt-3"></div>
+                                   <h1 className="text-3xl font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
+                                   <div className="w-12 h-1 bg-[#C9826B] mt-2"></div>
                                  </div>
                                )}
                                
-                               <div className={`max-w-3xl ${sIdx === 0 ? 'mt-6' : 'mt-2'}`}>
+                               <div className={`max-w-3xl ${sIdx === 0 ? 'mt-3' : 'mt-1'}`}>
                                  <ul className={listSpacingClass}>
                                    {paginatedEntries.map((entry, idx) => (
                                      <li key={`${entry.domId}-${sIdx}-${idx}`}>
