@@ -714,48 +714,54 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const tocLayoutProfile = useMemo(() => {
     if (settings.densityMode === 'compact') {
       return {
-        pageUnitCapacity: 29,
-        firstPageReservedUnits: 3.8,
-        charsPerLineByLevel: { 1: 34, 2: 42, 3: 50 },
-        baseUnitsByLevel: { 1: 1.45, 2: 1.05, 3: 0.9 },
-        extraLineUnits: 0.5,
+        pageUnitCapacity: 31,
+        firstPageReservedUnits: 3.2,
+        charsPerLineByLevel: { 1: 38, 2: 48, 3: 56 },
+        baseUnitsByLevel: { 1: 1.26, 2: 0.92, 3: 0.78 },
+        extraLineUnits: 0.38,
+        targetFillRatio: 0.94,
+        firstPageTargetFillRatio: 0.91,
       };
     }
 
     if (settings.densityMode === 'premium') {
       return {
-        pageUnitCapacity: 18,
-        firstPageReservedUnits: 4.2,
-        charsPerLineByLevel: { 1: 28, 2: 36, 3: 44 },
-        baseUnitsByLevel: { 1: 1.7, 2: 1.22, 3: 1.02 },
-        extraLineUnits: 0.62,
+        pageUnitCapacity: 20,
+        firstPageReservedUnits: 3.6,
+        charsPerLineByLevel: { 1: 31, 2: 40, 3: 48 },
+        baseUnitsByLevel: { 1: 1.5, 2: 1.08, 3: 0.92 },
+        extraLineUnits: 0.5,
+        targetFillRatio: 0.92,
+        firstPageTargetFillRatio: 0.88,
       };
     }
 
     return {
-      pageUnitCapacity: 23,
-      firstPageReservedUnits: 3.9,
-      charsPerLineByLevel: { 1: 31, 2: 39, 3: 47 },
-      baseUnitsByLevel: { 1: 1.55, 2: 1.12, 3: 0.96 },
-      extraLineUnits: 0.56,
+      pageUnitCapacity: 26,
+      firstPageReservedUnits: 3.3,
+      charsPerLineByLevel: { 1: 35, 2: 45, 3: 53 },
+      baseUnitsByLevel: { 1: 1.34, 2: 0.98, 3: 0.84 },
+      extraLineUnits: 0.42,
+      targetFillRatio: 0.93,
+      firstPageTargetFillRatio: 0.89,
     };
   }, [settings.densityMode]);
 
   const listSpacingClass = useMemo(() => {
-    if (settings.densityMode === 'compact') return 'space-y-0.5';
-    if (settings.densityMode === 'premium') return 'space-y-1.5';
-    return 'space-y-0.5'; // comfortable default
+    if (settings.densityMode === 'compact') return 'space-y-0';
+    if (settings.densityMode === 'premium') return 'space-y-1';
+    return 'space-y-0'; // comfortable default
   }, [settings.densityMode]);
 
   const linkPaddingClass = useMemo(() => {
-    if (settings.densityMode === 'compact') return 'py-0.5';
-    if (settings.densityMode === 'premium') return 'py-1';
-    return 'py-0.5'; // comfortable default
+    if (settings.densityMode === 'compact') return 'py-0';
+    if (settings.densityMode === 'premium') return 'py-0.5';
+    return 'py-0'; // comfortable default
   }, [settings.densityMode]);
 
   const linkLeadingClass = useMemo(() => {
     if (settings.densityMode === 'compact') return 'leading-tight';
-    if (settings.densityMode === 'premium') return 'leading-relaxed';
+    if (settings.densityMode === 'premium') return 'leading-snug';
     return 'leading-tight'; // comfortable default
   }, [settings.densityMode]);
 
@@ -884,8 +890,40 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     });
     
     flushCurrentPage();
+
+    const balancedPages = pages.map((pageEntries) => [...pageEntries]);
+
+    for (let pageIndex = 0; pageIndex < balancedPages.length - 1; pageIndex += 1) {
+      const currentEntries = balancedPages[pageIndex];
+      const nextEntries = balancedPages[pageIndex + 1];
+
+      if (!currentEntries || currentEntries.length === 0 || !nextEntries || nextEntries.length === 0) {
+        continue;
+      }
+
+      const pageCapacity = getPageCapacity(pageIndex);
+      const targetFillRatio = pageIndex === 0
+        ? tocLayoutProfile.firstPageTargetFillRatio
+        : tocLayoutProfile.targetFillRatio;
+
+      let currentPageUnits = getEntriesUnits(currentEntries);
+
+      while (nextEntries.length > 0 && (currentPageUnits / pageCapacity) < targetFillRatio) {
+        const remainingPageCapacity = pageCapacity - currentPageUnits;
+        const minTransferEntries = nextEntries[0].level === 1 && nextEntries.length > 1 ? 2 : 1;
+        const transferChunk = takeEntriesThatFit(nextEntries, remainingPageCapacity, minTransferEntries);
+
+        if (transferChunk.length === 0) {
+          break;
+        }
+
+        currentEntries.push(...transferChunk);
+        nextEntries.splice(0, transferChunk.length);
+        currentPageUnits += getEntriesUnits(transferChunk);
+      }
+    }
     
-    return pages;
+    return balancedPages.filter((pageEntries) => pageEntries.length > 0);
   }, [hasSumario, rawTocEntries, tocLayoutProfile]);
 
   const numSumarioPages = useMemo(() => {
@@ -1030,7 +1068,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     border: settings.pageBorder ? '1px solid #C9D8D5' : undefined,
   } as React.CSSProperties;
 
-  const renderHeader = (isCoverOrFirstPage: boolean, pageIdx?: number) => {
+  const renderHeader = (isCoverOrFirstPage: boolean, pageIdx?: number, variant: 'default' | 'toc' = 'default') => {
     if (isCoverOrFirstPage) return null;
     let headerTextVal = settings.headerText || `${settings.brand || 'Sua Marca'} | ${settings.shortTitle || settings.title || 'E-book'}`;
     
@@ -1044,14 +1082,16 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     if (alignment === 'center') alignmentClass = 'text-center';
     else if (alignment === 'right') alignmentClass = 'text-right';
 
+    const spacingClass = variant === 'toc' ? 'pb-2 mb-4' : 'pb-2 mb-6';
+
     return (
-      <div className={`text-[9pt] font-medium text-[var(--color-brand-azul)] border-b border-[var(--color-brand-linha)] pb-2 mb-6 header-print shrink-0 ${alignmentClass}`}>
+      <div className={`text-[9pt] font-medium text-[var(--color-brand-azul)] border-b border-[var(--color-brand-linha)] header-print shrink-0 ${spacingClass} ${alignmentClass}`}>
         <span>{headerTextVal}</span>
       </div>
     );
   };
 
-  const renderFooter = (pageNum: number, isCoverOrFirstPage: boolean, isSensitive: boolean = false) => {
+  const renderFooter = (pageNum: number, isCoverOrFirstPage: boolean, isSensitive: boolean = false, variant: 'default' | 'toc' = 'default') => {
     if (isCoverOrFirstPage) return null;
     let footerTextVal = settings.footerText;
     if (!footerTextVal) {
@@ -1079,8 +1119,10 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     let footerTextAlignClass = footerAlign === 'center' ? 'text-center' : footerAlign === 'right' ? 'text-right' : 'text-left';
     let pageNumAlignClass = pageNumAlign === 'center' ? 'text-center' : pageNumAlign === 'right' ? 'text-right' : 'text-left';
 
+    const spacingClass = variant === 'toc' ? 'pt-3 mt-5' : 'pt-4 mt-8';
+
     return (
-      <div className={`text-[9pt] text-[var(--color-brand-azul)] flex ${justifyClass} items-end border-t border-[var(--color-brand-linha)] pt-4 mt-8 footer-print shrink-0`}>
+      <div className={`text-[9pt] text-[var(--color-brand-azul)] flex ${justifyClass} items-end border-t border-[var(--color-brand-linha)] footer-print shrink-0 ${spacingClass}`}>
          <span className={`${textOrder} ${footerTextAlignClass} flex-grow md:flex-grow-0`}>
            {footerTextVal} {footerTextVal === "Conteúdo educativo. Não substitui avaliação profissional individualizada." ? "" : " · "}
          </span>
@@ -1787,18 +1829,18 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                          <section id={p.id} className="page flex flex-col justify-between scroll-mt-6 relative">
                             <div className="absolute top-0 right-0 w-48 h-48 bg-[#F4EFE7] rounded-bl-full opacity-30 -z-10"></div>
                             
-                            {renderHeader(false)}
+                            {renderHeader(false, undefined, 'toc')}
                             
                             <div className="flex-grow">
                                {sIdx === 0 && (
-                                 <div className="mb-5 text-left border-b border-[#FAF8F4] pb-4">
+                                 <div className="mb-4 text-left border-b border-[#FAF8F4] pb-3">
                                    <span className="text-xs font-bold uppercase tracking-widest text-[#6F8F9A] block mb-1">Índice Geral</span>
-                                   <h1 className="text-3xl font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
-                                   <div className="w-12 h-1 bg-[#C9826B] mt-2"></div>
+                                   <h1 className="text-[2rem] font-display font-bold text-[#245C5A] tracking-tight">Sumário</h1>
+                                   <div className="w-10 h-1 bg-[#C9826B] mt-2"></div>
                                  </div>
                                )}
                                
-                               <div className={`max-w-3xl ${sIdx === 0 ? 'mt-3' : 'mt-1'}`}>
+                               <div className={`w-full ${sIdx === 0 ? 'mt-2' : 'mt-0'}`}>
                                  <ul className={listSpacingClass}>
                                    {paginatedEntries.map((entry, idx) => (
                                      <li key={`${entry.domId}-${sIdx}-${idx}`}>
@@ -1818,17 +1860,17 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                          }}
                                          className={`group flex flex-row items-end justify-between hover:text-[#C9826B] transition-colors duration-150 ${linkPaddingClass}`}
                                        >
-                                         <span className={`text-left pr-2 pb-0.5 transition-colors duration-150 ${linkLeadingClass} ${
+                                         <span className={`text-left pr-2 pb-0 transition-colors duration-150 ${linkLeadingClass} ${
                                            entry.level === 1 
-                                            ? 'font-display font-bold text-[#245C5A] text-sm md:text-base group-hover:text-[#C9826B]' 
+                                            ? 'font-display font-bold text-[#245C5A] text-[15px] md:text-[15px] group-hover:text-[#C9826B]' 
                                             : entry.level === 2
-                                              ? 'font-sans text-sm font-semibold text-[#3D4447] pl-5 group-hover:text-[#C9826B]'
-                                              : 'font-sans text-xs text-[#5C6466] pl-9 group-hover:text-[#C9826B]'
+                                              ? 'font-sans text-[13px] font-semibold text-[#3D4447] pl-4 group-hover:text-[#C9826B]'
+                                              : 'font-sans text-[12px] text-[#5C6466] pl-7 group-hover:text-[#C9826B]'
                                          }`}>
                                            {entry.title}
                                          </span>
-                                         <span className="flex-grow border-b border-dotted border-[#C9D8D5] mx-2 relative top-[-4px] group-hover:border-[#C9826B] transition-colors"></span>
-                                         <span className="font-mono text-[#6F8F9A] font-bold text-sm shrink-0 group-hover:text-[#C9826B] transition-colors">
+                                         <span className="flex-grow border-b border-dotted border-[#C9D8D5] mx-1.5 relative top-[-3px] group-hover:border-[#C9826B] transition-colors"></span>
+                                         <span className="font-mono text-[#6F8F9A] font-bold text-[13px] shrink-0 group-hover:text-[#C9826B] transition-colors">
                                            {entry.pageNumber}
                                          </span>
                                        </a>
@@ -1847,7 +1889,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                </div>
                             </div>
 
-                            {renderFooter(p.pageNum, false)}
+                            {renderFooter(p.pageNum, false, false, 'toc')}
                          </section>
                          );
                        })()}
