@@ -160,7 +160,7 @@ h1, h2, h3, h4, h5 {
   font-size: var(--ebook-body-size, 11pt);
   text-align: justify;
   line-height: 1.5;
-  text-indent: 1.25cm;
+  text-indent: var(--ebook-paragraph-indent, 1.25cm);
 }
 
 .ebook-content .box-reflexao p,
@@ -361,6 +361,8 @@ h1, h2, h3, h4, h5 {
   column-gap: 10px !important;
   align-items: start !important;
   margin: 6px 0 9px 0 !important;
+  margin-left: var(--ebook-paragraph-indent, 1.25cm) !important;
+  width: calc(100% - var(--ebook-paragraph-indent, 1.25cm)) !important;
   break-inside: avoid !important;
   page-break-inside: avoid !important;
 }
