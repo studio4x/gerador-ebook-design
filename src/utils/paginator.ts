@@ -189,6 +189,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     const isH1 = tagName === 'h1' || node.querySelector('h1') !== null;
     const isH2 = tagName === 'h2';
     const isH3 = tagName === 'h3';
+    const currentPageHasChapterOpener = currentPageNodes.some((n) => n.classList.contains('chapter-opener'));
     
     const nodeText = node.textContent || '';
     const nodeWords = nodeText.trim().split(/\s+/).filter(x => x.length > 0).length;
@@ -237,6 +238,10 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
 
     if (isPromptLabel) {
       nodeCost += 16;
+    }
+
+    if (currentPageHasChapterOpener && !isChapterOpener && currentPageNodes.length > 0) {
+      flushPage();
     }
 
     // Dynamic split algorithm for massive indivisible elements (Boxes and Lists) to prevent bottom clippings

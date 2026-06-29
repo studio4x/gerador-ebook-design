@@ -823,6 +823,67 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     (hasFinalPage ? 1 : 0);
   const hybridMetrics = getHybridPrintMetrics(estimatedPageCount, safeSettings.pageFormat);
 
+  // Pre-calculate the current active chapter title for every content page
+  const pageChapterTitles = useMemo<string[]>(() => {
+    const titles: string[] = [];
+    let currentChapterTitle = '';
+    const parser = new DOMParser();
+
+    activeContentPages.forEach((pageHtml, index) => {
+      const pageDoc = parser.parseFromString(pageHtml, 'text/html');
+      const chapterOpener = pageDoc.querySelector('.chapter-opener');
+
+      if (chapterOpener) {
+        const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
+        let titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
+        
+        // Find first real title if titleText is empty or generic
+        if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
+          let foundRealTitle = '';
+          for (let scanIdx = index; scanIdx < activeContentPages.length; scanIdx++) {
+            if (scanIdx > index) {
+              const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
+              if (scanDoc.querySelector('.chapter-opener')) {
+                break;
+              }
+            }
+            const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
+            const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
+            for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
+              const h = otherHeadings[hIdx];
+              if (h.closest('.chapter-opener')) continue;
+              const isExcluded = h.closest('.box-reflexao') || 
+                                 h.closest('.box-cuidado') || 
+                                 h.closest('.box-informativo');
+              if (isExcluded) continue;
+              const hText = h.textContent?.trim() || '';
+              if (hText && hText.length > 2 && !/^capítulo/i.test(hText)) {
+                foundRealTitle = hText;
+                break;
+              }
+            }
+            if (foundRealTitle) break;
+          }
+          if (foundRealTitle) {
+            titleText = foundRealTitle;
+          }
+        }
+        
+        const cleanTitle = titleText.replace(/^capítulo\s*\d+\s*[-|:]?\s*/i, '').trim();
+        if (numText && cleanTitle) {
+          currentChapterTitle = `Capítulo ${numText.replace(/^0+/, '')}: ${cleanTitle}`;
+        } else if (numText) {
+          currentChapterTitle = `Capítulo ${numText.replace(/^0+/, '')}`;
+        } else {
+          currentChapterTitle = cleanTitle || '';
+        }
+      }
+      titles.push(currentChapterTitle);
+    });
+
+    return titles;
+  }, [activeContentPages]);
+
   // Extract raw chapters / principal headings from parsed HTML of the content pages, memoized for performance
   const rawTocEntries = useMemo(() => {
     const parser = new DOMParser();
@@ -921,8 +982,21 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       });
     });
 
+    const fallbackChapterIndex = pageChapterTitles.findIndex((title) => /^Capítulo\s*1\b/i.test(title));
+    if (
+      fallbackChapterIndex >= 0 &&
+      !entries.some((entry) => entry.isChapter && /^Capítulo\s*0*1\b/i.test(entry.title))
+    ) {
+      entries.unshift({
+        title: pageChapterTitles[fallbackChapterIndex],
+        relativePageOffset: fallbackChapterIndex,
+        isChapter: true,
+        level: 1,
+      });
+    }
+
     return entries;
-  }, [activeContentPages]);
+  }, [activeContentPages, pageChapterTitles]);
 
   // Adjust table of contents entries spacing by Density setting
   const tocLayoutProfile = useMemo(() => {
@@ -1136,67 +1210,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return tocPagesMapped.flat();
   }, [tocPagesMapped]);
 
-  // Pre-calculate the current active chapter title for every content page
-  const pageChapterTitles = useMemo<string[]>(() => {
-    const titles: string[] = [];
-    let currentChapterTitle = '';
-    const parser = new DOMParser();
-
-    activeContentPages.forEach((pageHtml, index) => {
-      const pageDoc = parser.parseFromString(pageHtml, 'text/html');
-      const chapterOpener = pageDoc.querySelector('.chapter-opener');
-
-      if (chapterOpener) {
-        const numText = chapterOpener.querySelector('.chapter-number')?.textContent?.trim() || '';
-        let titleText = chapterOpener.querySelector('h1')?.textContent?.trim() || '';
-        
-        // Find first real title if titleText is empty or generic
-        if (!titleText || /^capítulo\s*\d+$/i.test(titleText)) {
-          let foundRealTitle = '';
-          for (let scanIdx = index; scanIdx < activeContentPages.length; scanIdx++) {
-            if (scanIdx > index) {
-              const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
-              if (scanDoc.querySelector('.chapter-opener')) {
-                break;
-              }
-            }
-            const scanDoc = parser.parseFromString(activeContentPages[scanIdx], 'text/html');
-            const otherHeadings = scanDoc.querySelectorAll('h1, h2, h3');
-            for (let hIdx = 0; hIdx < otherHeadings.length; hIdx++) {
-              const h = otherHeadings[hIdx];
-              if (h.closest('.chapter-opener')) continue;
-              const isExcluded = h.closest('.box-reflexao') || 
-                                 h.closest('.box-cuidado') || 
-                                 h.closest('.box-informativo');
-              if (isExcluded) continue;
-              const hText = h.textContent?.trim() || '';
-              if (hText && hText.length > 2 && !/^capítulo/i.test(hText)) {
-                foundRealTitle = hText;
-                break;
-              }
-            }
-            if (foundRealTitle) break;
-          }
-          if (foundRealTitle) {
-            titleText = foundRealTitle;
-          }
-        }
-        
-        const cleanTitle = titleText.replace(/^capítulo\s*\d+\s*[-|:]?\s*/i, '').trim();
-        if (numText && cleanTitle) {
-          currentChapterTitle = `Capítulo ${numText.replace(/^0+/, '')}: ${cleanTitle}`;
-        } else if (numText) {
-          currentChapterTitle = `Capítulo ${numText.replace(/^0+/, '')}`;
-        } else {
-          currentChapterTitle = cleanTitle || '';
-        }
-      }
-      titles.push(currentChapterTitle);
-    });
-
-    return titles;
-  }, [activeContentPages]);
-
   // Compute specific CSS layout variables depending on Density mode for precise reading sizes
   let bodyFontSize = '11.5pt';
   let bodyLineHeight = '1.5';
@@ -1273,6 +1286,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const renderFooter = (pageNum: number, isCoverOrFirstPage: boolean, isSensitive: boolean = false, variant: 'default' | 'toc' = 'default') => {
     if (isCoverOrFirstPage) return null;
     let footerTextVal = settings.footerText;
+    if (footerTextVal && /m[ií]nimo\s*\d+[,.]?\d*\s*pt/i.test(footerTextVal)) {
+      footerTextVal = '';
+    }
     if (!footerTextVal) {
         if (isSensitive) {
              footerTextVal = "Conteúdo educativo. Não substitui avaliação profissional individualizada.";
