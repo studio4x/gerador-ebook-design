@@ -314,6 +314,36 @@ export default function App() {
     setNotification({ message, type });
   };
 
+  const getCleanContentMetadata = (sourceBlocks: ContentBlock[] = blocks) => {
+    if (sourceBlocks.length === 0) return {} as Partial<ProjectSettings>;
+
+    const isVisualEditsOnly =
+      sourceBlocks.length === 1 && sourceBlocks[0].filename === "Edições Visuais.md";
+    const hasFrontmatter =
+      isVisualEditsOnly && /^---\r?\n[\s\S]*?\r?\n---/.test(sourceBlocks[0].content);
+    const contentMetadata = extractMetadataFromContent(sourceBlocks);
+
+    return Object.fromEntries(
+      Object.entries(contentMetadata).filter(([_, value]) => {
+        if (value === undefined || value === null) return false;
+        if (typeof value === "string" && value.trim() === "") return false;
+        if (isVisualEditsOnly && !hasFrontmatter) return false;
+        return true;
+      }),
+    ) as Partial<ProjectSettings>;
+  };
+
+  const mergeContentMetadataIntoSettings = (
+    baseSettings: ProjectSettings,
+    sourceBlocks: ContentBlock[] = blocks,
+  ): ProjectSettings => {
+    const cleanMetadata = getCleanContentMetadata(sourceBlocks);
+    return {
+      ...baseSettings,
+      ...cleanMetadata,
+    };
+  };
+
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => {
@@ -650,7 +680,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.153";
+  const buildVersionStr = "v1.4.154";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     return {
@@ -833,22 +863,7 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (blocks.length > 0) {
-        const isVisualEditsOnly = blocks.length === 1 && blocks[0].filename === "Edições Visuais.md";
-        const hasFrontmatter = isVisualEditsOnly && /^---\r?\n[\s\S]*?\r?\n---/.test(blocks[0].content);
-
-        const contentMetadata = extractMetadataFromContent(blocks);
-
-        if (isVisualEditsOnly && !hasFrontmatter) {
-          return;
-        }
-        
-        const cleanMetadata = Object.fromEntries(
-          Object.entries(contentMetadata).filter(([_, value]) => {
-            if (value === undefined || value === null) return false;
-            if (typeof value === "string" && value.trim() === "") return false;
-            return true;
-          })
-        );
+        const cleanMetadata = getCleanContentMetadata(blocks);
 
         if (Object.keys(cleanMetadata).length > 0) {
           setSettings((prev) => {
@@ -1026,10 +1041,10 @@ export default function App() {
       const text = await file.text();
       const parsedSettings = parseHandoffMarkdown(text);
 
-      const mergedSettings = {
+      const mergedSettings = mergeContentMetadataIntoSettings({
         ...settings,
         ...parsedSettings,
-      } as ProjectSettings;
+      } as ProjectSettings);
       setSettings(mergedSettings);
 
       const newRevId = safeUUID();
@@ -1057,7 +1072,13 @@ export default function App() {
   };
 
   const applyRevision = (rev: LayoutRevision) => {
-    setSettings(rev.settings);
+    const mergedSettings = mergeContentMetadataIntoSettings(rev.settings);
+    setSettings(mergedSettings);
+    setRevisions((prev) =>
+      prev.map((item) =>
+        item.id === rev.id ? { ...item, settings: mergedSettings } : item,
+      ),
+    );
     setActiveRevisionId(rev.id);
     showToast(`Revisão "${rev.filename}" aplicada com sucesso!`, "success");
   };
@@ -1085,18 +1106,8 @@ export default function App() {
       // 1. Extract metadata from content
       const isVisualEditsOnly = blocks.length === 1 && blocks[0].filename === "Edições Visuais.md";
       const hasFrontmatter = isVisualEditsOnly && /^---\r?\n[\s\S]*?\r?\n---/.test(blocks[0].content);
-
-      const contentMetadata = extractMetadataFromContent(blocks);
-
-      const cleanMetadata = Object.fromEntries(
-        Object.entries(contentMetadata).filter(([key, value]) => {
-          if (value === undefined || value === null) return false;
-          if (typeof value === "string" && value.trim() === "") return false;
-          // Protect from visual edits without frontmatter trying to overwrite settings
-          if (isVisualEditsOnly && !hasFrontmatter) return false;
-          return true;
-        })
-      );
+      const cleanMetadata =
+        isVisualEditsOnly && !hasFrontmatter ? {} : getCleanContentMetadata(blocks);
 
       let merged: ProjectSettings;
 

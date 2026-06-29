@@ -135,7 +135,10 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
       text.includes('chamada para ação') || 
       text.includes('fale conosco') || 
       text.includes('fale com a gente') || 
+      text.includes('fale com a conexão seres') ||
+      text.includes('fale com a conexao seres') ||
       text.includes('sobre o agendamento') || 
+      text.includes('agendamento e contato') || 
       text.includes('cta') ||
       text.includes('sumário') ||
       text.includes('sumario') ||
@@ -481,6 +484,21 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
   if (blocks.length === 0) return result;
 
   const mergedMarkdown = blocks.map(b => b.content).join('\n\n');
+  const stripMarkdownDecoration = (value: string) =>
+    value
+      .replace(/^\s*[-*]\s*/, '')
+      .replace(/\*/g, '')
+      .replace(/__/g, '')
+      .replace(/^\s*:\s*/, '')
+      .replace(/[<>]/g, '')
+      .trim();
+  const isMeaningfulMetadataValue = (value?: string) => {
+    if (!value) return false;
+    const normalized = value.trim();
+    if (!normalized) return false;
+    if (/^[*:]+$/.test(normalized)) return false;
+    return /[A-Za-z0-9À-ÿ@]/.test(normalized);
+  };
 
   // 1. Yaml-based frontmatter parser
   for (const block of blocks) {
@@ -553,6 +571,8 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
             break;
           case 'warning':
           case 'aviso':
+          case 'observacao':
+          case 'observação':
             result.educationalWarning = value;
             break;
           case 'editionyear':
@@ -653,36 +673,64 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
     if (regVal) result.professionalReg = regVal;
   }
 
+  if (!result.professionalReg && result.professionalTitle) {
+    const regMatch = result.professionalTitle.match(/(CREFITO[^—–\n]*)/i);
+    if (regMatch) {
+      result.professionalReg = regMatch[1].trim();
+      result.professionalTitle = result.professionalTitle
+        .replace(regMatch[1], '')
+        .replace(/\s*[—–-]\s*$/, '')
+        .trim();
+    }
+  }
+
   const extractContactVal = (val: string) => {
-      const match = val.match(/\[.*?\]\((.*?)\)/);
-      if (match) return match[1];
-      return val.replace(/[<>\*]/g, '').trim();
+      const markdownLinkMatch = val.match(/\[.*?\]\((.*?)\)/);
+      if (markdownLinkMatch) return stripMarkdownDecoration(markdownLinkMatch[1]);
+      const htmlHrefMatch = val.match(/href="([^"]+)"/i);
+      if (htmlHrefMatch) return stripMarkdownDecoration(htmlHrefMatch[1]);
+      return stripMarkdownDecoration(val);
   };
 
   // Contacts
   if (!result.website) {
     const siteVal = findValueInLines(/(?:Site|Website):\s*(.*)/i);
-    if (siteVal) result.website = extractContactVal(siteVal);
+    if (siteVal) {
+      const normalized = extractContactVal(siteVal);
+      if (isMeaningfulMetadataValue(normalized)) result.website = normalized;
+    }
   }
 
   if (!result.whatsapp) {
     const whatsappVal = findValueInLines(/(?:WhatsApp|Whats):\s*(.*)/i);
-    if (whatsappVal) result.whatsapp = extractContactVal(whatsappVal);
+    if (whatsappVal) {
+      const normalized = extractContactVal(whatsappVal);
+      if (isMeaningfulMetadataValue(normalized)) result.whatsapp = normalized;
+    }
   }
 
   if (!result.email) {
     const emailVal = findValueInLines(/(?:E-mail|Email):\s*(.*)/i);
-    if (emailVal) result.email = extractContactVal(emailVal);
+    if (emailVal) {
+      const normalized = extractContactVal(emailVal);
+      if (isMeaningfulMetadataValue(normalized)) result.email = normalized;
+    }
   }
 
   if (!result.instagram) {
     const instaVal = findValueInLines(/(?:Instagram|Insta):\s*(.*)/i);
-    if (instaVal) result.instagram = extractContactVal(instaVal);
+    if (instaVal) {
+      const normalized = extractContactVal(instaVal);
+      if (isMeaningfulMetadataValue(normalized)) result.instagram = normalized;
+    }
   }
 
   if (!result.contactAddress) {
     const addressVal = findValueInLines(/(?:Endereço|Localização):\s*(.*)/i);
-    if (addressVal) result.contactAddress = addressVal;
+    if (addressVal) {
+      const normalized = stripMarkdownDecoration(addressVal);
+      if (isMeaningfulMetadataValue(normalized) && normalized !== ':') result.contactAddress = normalized;
+    }
   }
 
   if (!result.schedulingUrl) {
@@ -700,29 +748,82 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
     if (isbnVal) result.isbn = isbnVal;
   }
 
+  if (!result.whatsapp) {
+    const whatsappMatch = mergedMarkdown.match(/https:\/\/wa\.me\/[^\s)"'>]+/i);
+    if (whatsappMatch) result.whatsapp = whatsappMatch[0];
+  }
+
+  if (!result.schedulingUrl) {
+    const schedulingMatch = mergedMarkdown.match(/https:\/\/conexaoseres\.com\.br\/agendar-avaliacao-e-contato\/?/i);
+    if (schedulingMatch) result.schedulingUrl = schedulingMatch[0];
+  }
+
+  if (!result.website) {
+    const websiteMatch = mergedMarkdown.match(/https:\/\/conexaoseres\.com\.br\/?(?!agendar-avaliacao-e-contato)/i);
+    if (websiteMatch) result.website = websiteMatch[0];
+  }
+
+  if (!result.email) {
+    const emailMatch = mergedMarkdown.match(/\b[A-Z0-9._%+-]+@conexaoseres\.com\.br\b/i);
+    if (emailMatch) result.email = emailMatch[0];
+  }
+
+  if (!result.instagram) {
+    const instagramMatch = mergedMarkdown.match(/@conexao\.seres\b/i);
+    if (instagramMatch) result.instagram = instagramMatch[0];
+  }
+
+  if (!isMeaningfulMetadataValue(result.contactAddress) || result.contactAddress === "**") {
+    const addressMatch = mergedMarkdown.match(/Rua Petrobr[aá]s,\s*683[\s\S]*?CEP\s*03474-060/i);
+    if (addressMatch) {
+      result.contactAddress = addressMatch[0].replace(/\s*\n\s*/g, " ").trim();
+    }
+  }
+
   // Disclaimer warning body
-  const warningHeaderMatch = mergedMarkdown.match(/(?:#|##|###)\s*(?:aviso importante|aviso educativo|aviso legal|disclaimer)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:#|##|###|\n|$))/i);
-  if (warningHeaderMatch && warningHeaderMatch[1] && !result.educationalWarning) {
-    result.educationalWarning = warningHeaderMatch[1].trim();
+  const warningHeaderMatch = mergedMarkdown.match(/(?:###|##|#)\s*(?:aviso importante|aviso educativo|aviso legal|disclaimer)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:###|##|#)\s|$)/i);
+  if (warningHeaderMatch && warningHeaderMatch[1]) {
+    const warningText = warningHeaderMatch[1].replace(/\n---\s*$/m, '').trim();
+    if (!result.educationalWarning || warningText.length > result.educationalWarning.length) {
+      result.educationalWarning = warningText;
+    }
   }
 
   // CTA text body
-  const ctaHeaderMatch = mergedMarkdown.match(/(?:#|##|###)\s*(?:um convite|chamada para ação|fale conosco|fale com a gente|sobre o agendamento|cta)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:#|##|###|\n|$))/i);
-  if (ctaHeaderMatch && ctaHeaderMatch[1] && !result.ctaText) {
-    let rawText = ctaHeaderMatch[1].trim();
-    
-    // Look for a Markdown link to extract for the CTA button
-    const linkMatch = rawText.match(/\[(.*?)\]\((https?:\/\/[^\s]+)\)/);
-    if (linkMatch) {
-      if (!result.ctaButtonText) result.ctaButtonText = linkMatch[1].replace(/[*_]/g, '');
-      if (!result.schedulingUrl && !result.whatsapp) {
-         result.schedulingUrl = linkMatch[2]; // Use as primary url for button
+  const ctaHeaderMatch = mergedMarkdown.match(/(?:###|##|#)\s*(?:\d+(?:\.\d+)*)?\s*(?:um convite|chamada para ação|fale conosco|fale com a gente|fale com a conex[aã]o seres|sobre o agendamento|agendamento e contato|cta)[\s\S]*?\r?\n([\s\S]*?)(?=\r?\n(?:###|##|#)\s|$)/i);
+  if (ctaHeaderMatch && ctaHeaderMatch[1]) {
+    const rawSection = ctaHeaderMatch[1].replace(/\n---\s*$/m, '').trim();
+    const sectionLines = rawSection.split(/\r?\n/);
+    const ctaParagraphLines: string[] = [];
+
+    for (const line of sectionLines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (ctaParagraphLines.length > 0) ctaParagraphLines.push("");
+        continue;
       }
-      // Remove the markdown link from the text body so we don't render "[label](url)" literally
-      rawText = rawText.replace(linkMatch[0], '').trim();
+      if (trimmed.startsWith("**") || trimmed.startsWith("<a ") || /^@[\w.]+/.test(trimmed)) {
+        break;
+      }
+      ctaParagraphLines.push(trimmed);
     }
-    
-    result.ctaText = rawText;
+
+    const normalizedCtaText = ctaParagraphLines
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    if (normalizedCtaText && !result.ctaText) {
+      result.ctaText = normalizedCtaText;
+    }
+
+    if (!result.ctaButtonText) {
+      if (/Enviar mensagem pelo WhatsApp/i.test(rawSection)) {
+        result.ctaButtonText = "Enviar mensagem pelo WhatsApp";
+      } else if (/Agendar avaliação e contato/i.test(rawSection)) {
+        result.ctaButtonText = "Agendar avaliação e contato";
+      }
+    }
   }
 
   return result;
