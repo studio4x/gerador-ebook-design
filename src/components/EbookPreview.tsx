@@ -49,6 +49,45 @@ interface TocEntry {
   level?: number;
 }
 
+function hasMeaningfulPageContent(pageHtml: string): boolean {
+  if (!pageHtml || !pageHtml.trim()) return false;
+
+  const doc = new DOMParser().parseFromString(pageHtml, 'text/html');
+  const contentNodes = Array.from(doc.body.children).filter((node) => {
+    return !(
+      node.classList.contains('manual-page-break') ||
+      node.classList.contains('page-break') ||
+      node.getAttribute('data-page-break') === 'true'
+    );
+  });
+
+  if (contentNodes.length === 0) return false;
+
+  return contentNodes.some((node) => {
+    if (node.classList.contains('chapter-opener')) return true;
+
+    if (
+      node.matches('img, svg, canvas, table, hr, ul, ol, blockquote') ||
+      node.querySelector('img, svg, canvas, table, hr, ul, ol, blockquote')
+    ) {
+      return true;
+    }
+
+    if (
+      node.classList.contains('box-cuidado') ||
+      node.classList.contains('box-informativo') ||
+      node.classList.contains('box-reflexao') ||
+      node.classList.contains('fill-line') ||
+      node.classList.contains('checklist-item') ||
+      node.classList.contains('frase-central')
+    ) {
+      return true;
+    }
+
+    return (node.textContent || '').trim().length > 0;
+  });
+}
+
 export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode = false, onContentUpdate }: EbookPreviewProps) {
   const [viewMode, setViewMode] = useState<'scroll' | 'book' | 'grid'>(isPrintMode ? 'scroll' : 'scroll');
   const [zoom, setZoom] = useState<number>(isPrintMode ? 100 : 55);
@@ -60,7 +99,11 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   const [localContentPages, setLocalContentPages] = useState<string[] | null>(null);
 
-  const activeContentPages = (isEditingVisual && localContentPages) ? localContentPages : contentPages;
+  const sourceContentPages = (isEditingVisual && localContentPages) ? localContentPages : contentPages;
+  const activeContentPages = useMemo(
+    () => sourceContentPages.filter(hasMeaningfulPageContent),
+    [sourceContentPages]
+  );
 
   type VisualSnapshot = {
     htmlByPage: Record<number, string>;
