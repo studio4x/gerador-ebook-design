@@ -948,7 +948,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return baseUnits + wrapUnits;
   };
 
-  // Group and paginate TOC entries using estimated entry height so each page is filled as much as possible.
+  // Group and paginate TOC entries keeping each chapter block intact whenever possible.
   const tocPagesRaw = useMemo(() => {
     if (!hasSumario) return [];
     if (rawTocEntries.length === 0) return [];
@@ -1005,7 +1005,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       return chunk;
     };
 
-    // 2. Distribute groups across pages, but allow partial splits when that meaningfully increases page fill.
+    // 2. Distribute groups across pages. A chapter group should never be split across pages
+    // unless the group itself is taller than a fresh page and cannot fit intact anywhere.
     const pages: (typeof rawTocEntries)[] = [];
     let currentPage: typeof rawTocEntries = [];
     let currentPageUnits = 0;
@@ -1023,7 +1024,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
       while (remainingEntries.length > 0) {
         const pageCapacity = getPageCapacity(pages.length);
-        const remainingPageCapacity = pageCapacity - currentPageUnits;
         const wholeGroupUnits = getEntriesUnits(remainingEntries);
 
         if (currentPageUnits + wholeGroupUnits <= pageCapacity) {
@@ -1033,16 +1033,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
           continue;
         }
 
-        const minEntriesToStartChunk = remainingEntries.length > 1 ? 2 : 1;
-
         if (currentPage.length > 0) {
-          const partialChunk = takeEntriesThatFit(remainingEntries, remainingPageCapacity, minEntriesToStartChunk);
-          if (partialChunk.length >= minEntriesToStartChunk) {
-            currentPage.push(...partialChunk);
-            currentPageUnits += getEntriesUnits(partialChunk);
-            remainingEntries = remainingEntries.slice(partialChunk.length);
-          }
-
           flushCurrentPage();
           continue;
         }
@@ -1064,39 +1055,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     
     flushCurrentPage();
 
-    const balancedPages = pages.map((pageEntries) => [...pageEntries]);
-
-    for (let pageIndex = 0; pageIndex < balancedPages.length - 1; pageIndex += 1) {
-      const currentEntries = balancedPages[pageIndex];
-      const nextEntries = balancedPages[pageIndex + 1];
-
-      if (!currentEntries || currentEntries.length === 0 || !nextEntries || nextEntries.length === 0) {
-        continue;
-      }
-
-      const pageCapacity = getPageCapacity(pageIndex);
-      const targetFillRatio = pageIndex === 0
-        ? tocLayoutProfile.firstPageTargetFillRatio
-        : tocLayoutProfile.targetFillRatio;
-
-      let currentPageUnits = getEntriesUnits(currentEntries);
-
-      while (nextEntries.length > 0 && (currentPageUnits / pageCapacity) < targetFillRatio) {
-        const remainingPageCapacity = pageCapacity - currentPageUnits;
-        const minTransferEntries = nextEntries[0].level === 1 && nextEntries.length > 1 ? 2 : 1;
-        const transferChunk = takeEntriesThatFit(nextEntries, remainingPageCapacity, minTransferEntries);
-
-        if (transferChunk.length === 0) {
-          break;
-        }
-
-        currentEntries.push(...transferChunk);
-        nextEntries.splice(0, transferChunk.length);
-        currentPageUnits += getEntriesUnits(transferChunk);
-      }
-    }
-    
-    return balancedPages.filter((pageEntries) => pageEntries.length > 0);
+    return pages.filter((pageEntries) => pageEntries.length > 0);
   }, [hasSumario, rawTocEntries, tocLayoutProfile]);
 
   const numSumarioPages = useMemo(() => {
