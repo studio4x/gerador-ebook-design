@@ -15,6 +15,53 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   };
   
   const activeLimit = limits[mode] || limits.comfortable;
+
+  const isManualBreakNode = (node: Element) =>
+    node.classList.contains('manual-page-break') ||
+    node.classList.contains('page-break') ||
+    node.getAttribute('data-page-break') === 'true';
+
+  const isSeparatorNode = (node: Element) =>
+    node.tagName.toLowerCase() === 'hr';
+
+  const isFillLineNode = (node: Element) =>
+    node.classList.contains('fill-line');
+
+  const isChecklistNode = (node: Element) =>
+    node.classList.contains('checklist-item');
+
+  const isLabelLikeNode = (node: Element) => {
+    const tagName = node.tagName.toLowerCase();
+    if (!['p', 'div'].includes(tagName)) return false;
+
+    const text = (node.textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (!text) return false;
+    if (text.length > 120) return false;
+
+    return /[:?]$/.test(text);
+  };
+
+  const pageHasMeaningfulContent = (pageNodes: Element[]) =>
+    pageNodes.some((node) => {
+      const tagName = node.tagName.toLowerCase();
+      const text = (node.textContent || '').replace(/\u00a0/g, ' ').trim();
+
+      if (isManualBreakNode(node) || isSeparatorNode(node)) return false;
+      if (node.classList.contains('chapter-opener')) return true;
+      if (isChecklistNode(node) || isFillLineNode(node)) return true;
+      if (
+        node.classList.contains('box-cuidado') ||
+        node.classList.contains('box-informativo') ||
+        node.classList.contains('box-reflexao') ||
+        node.classList.contains('frase-central')
+      ) {
+        return true;
+      }
+      if (['img', 'svg', 'canvas', 'table', 'ul', 'ol', 'blockquote'].includes(tagName)) {
+        return true;
+      }
+      return text.length > 0;
+    });
   
   const flushPage = () => {
     // Check for orphan headings at the end of the page
@@ -24,9 +71,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     let nonHeadingCount = 0;
 
     // Detect if this page contains a manual page break
-    const hasManualBreak = currentPageNodes.some(
-      n => n.classList.contains('manual-page-break') || n.classList.contains('page-break') || n.getAttribute('data-page-break') === 'true'
-    );
+    const hasManualBreak = currentPageNodes.some((n) => isManualBreakNode(n));
 
     if (!hasManualBreak) {
       for (let j = currentPageNodes.length - 1; j >= 0; j--) {
@@ -61,14 +106,28 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
       orphanNodes.push(...popped);
     }
 
-    if (currentPageNodes.length > 0) {
+    const carryNodes: Element[] = [];
+    while (currentPageNodes.length > 0) {
+      const lastNode = currentPageNodes[currentPageNodes.length - 1];
+      if (isSeparatorNode(lastNode) || isFillLineNode(lastNode)) {
+        carryNodes.unshift(currentPageNodes.pop() as Element);
+        continue;
+      }
+      if (isLabelLikeNode(lastNode)) {
+        carryNodes.unshift(currentPageNodes.pop() as Element);
+        continue;
+      }
+      break;
+    }
+
+    if (pageHasMeaningfulContent(currentPageNodes)) {
         pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
     }
     
-    currentPageNodes = [...orphanNodes];
+    currentPageNodes = [...carryNodes, ...orphanNodes];
     
     // Recalculate height for the orphans we carried over
-    currentHeightUnits = orphanNodes.reduce((acc, n) => {
+    currentHeightUnits = currentPageNodes.reduce((acc, n) => {
         const t = n.tagName.toLowerCase();
         const isChap = n.classList.contains('chapter-opener');
         const isBx = n.classList.contains('box-cuidado') || n.classList.contains('box-informativo') || n.classList.contains('box-reflexao');
@@ -85,7 +144,10 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
         else if (t === 'h1' || n.querySelector('h1')) cost += 50;
         else if (t === 'h2') cost += 30;
         else if (t === 'h3') cost += 25;
-        else if (t === 'p' || t === 'li' || t === 'ul' || t === 'ol') cost += 14;
+        else if (n.classList.contains('checklist-item')) cost += 22;
+        else if (n.classList.contains('fill-line')) cost += 28;
+        else if (t === 'ul' || t === 'ol') cost += (n.querySelectorAll('li').length * 12) + 14;
+        else if (t === 'p' || t === 'li') cost += 14;
         else cost += 8;
         return acc + cost;
     }, 0);
@@ -97,7 +159,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     
     // Check if it's a chapter opener
     const isChapterOpener = node.classList.contains('chapter-opener');
-    const isManualPageBreak = node.classList.contains('manual-page-break') || node.classList.contains('page-break') || node.getAttribute('data-page-break') === 'true';
+    const isManualPageBreak = isManualBreakNode(node);
     
     if (isManualPageBreak) {
       const hasVisibleContent = currentPageNodes.some(
@@ -124,7 +186,11 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     const isBox = node.classList.contains('box-cuidado') || 
                   node.classList.contains('box-informativo') || 
                   node.classList.contains('box-reflexao');
+    const isChecklistItem = node.classList.contains('checklist-item');
+    const isFillLine = node.classList.contains('fill-line');
+    const isSeparatorRule = tagName === 'hr';
     const isList = tagName === 'ul' || tagName === 'ol';
+    const isPromptLabel = ['p', 'div'].includes(tagName) && /[:?]$/.test(nodeText.trim()) && nodeWords <= 18;
                   
     // Calculate custom height cost based on element margins, padding, line heights, and words
     let nodeCost = nodeWords;
@@ -138,17 +204,29 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
       nodeCost += 80 + (innerParagraphsCount * 18) + (innerHeadingCount * 30) + (innerListItemCount * 14) + (innerListCount * 10);
     } else if (isChapterOpener) {
       nodeCost = 9999; // Occupies a full page exclusively
+    } else if (isChecklistItem) {
+      nodeCost += 22;
+    } else if (isFillLine) {
+      nodeCost = Math.max(28, nodeWords + 24);
+    } else if (isSeparatorRule) {
+      nodeCost = 12;
     } else if (isH1) {
       nodeCost += 50;
     } else if (isH2) {
       nodeCost += 30; // Increased heading height weight
     } else if (isH3) {
       nodeCost += 25;
-    } else if (tagName === 'p' || tagName === 'li' || tagName === 'ul' || tagName === 'ol') {
+    } else if (isList) {
+      nodeCost += (node.querySelectorAll('li').length * 12) + 14;
+    } else if (tagName === 'p' || tagName === 'li') {
       // Paragraphs and list items have substantial margin bottoms
       nodeCost += 14; // Increased layout margin footprint weight
     } else {
       nodeCost += 8;
+    }
+
+    if (isPromptLabel) {
+      nodeCost += 16;
     }
 
     // Dynamic split algorithm for massive indivisible elements (Boxes and Lists) to prevent bottom clippings
@@ -270,7 +348,7 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     currentHeightUnits += nodeCost;
   }
   
-  if (currentPageNodes.length > 0) {
+  if (pageHasMeaningfulContent(currentPageNodes)) {
     pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
   }
   

@@ -67,8 +67,8 @@ function hasMeaningfulPageContent(pageHtml: string): boolean {
     if (node.classList.contains('chapter-opener')) return true;
 
     if (
-      node.matches('img, svg, canvas, table, hr, ul, ol, blockquote') ||
-      node.querySelector('img, svg, canvas, table, hr, ul, ol, blockquote')
+      node.matches('img, svg, canvas, table, ul, ol, blockquote') ||
+      node.querySelector('img, svg, canvas, table, ul, ol, blockquote')
     ) {
       return true;
     }
@@ -282,6 +282,36 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return afterText.length === 0 && !hasMeaningfulElementAfter;
   };
 
+  const isCursorAtStartOfEditable = (editable: HTMLElement): boolean => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !editable.contains(range.startContainer)) return false;
+
+    const beforeRange = range.cloneRange();
+    beforeRange.selectNodeContents(editable);
+    beforeRange.setEnd(range.startContainer, range.startOffset);
+
+    const beforeText = beforeRange.toString().replace(/\u00a0/g, " ").trim();
+
+    const beforeFragment = beforeRange.cloneContents();
+    const temp = document.createElement("div");
+    temp.appendChild(beforeFragment);
+
+    const hasMeaningfulElementBefore = Array.from(temp.querySelectorAll("*")).some((el) => {
+      const htmlEl = el as HTMLElement;
+      const text = (htmlEl.textContent || "").replace(/\u00a0/g, " ").trim();
+      const isBoundaryArtifact =
+        htmlEl.classList.contains("manual-page-break") ||
+        htmlEl.dataset.pageBreak === "true" ||
+        htmlEl.tagName.toLowerCase() === "hr";
+      return text.length > 0 && !isBoundaryArtifact;
+    });
+
+    return beforeText.length === 0 && !hasMeaningfulElementBefore;
+  };
+
   const hasTrailingManualBreak = (html: string): boolean => {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const body = doc.body;
@@ -298,6 +328,36 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     }
 
     return true;
+  };
+
+  const stripBoundaryArtifacts = (doc: Document, side: 'start' | 'end') => {
+    const elements = Array.from(doc.body.children);
+    const ordered = side === 'start' ? elements : [...elements].reverse();
+    let removedAny = false;
+
+    for (const element of ordered) {
+      const htmlEl = element as HTMLElement;
+      const isManualBreak =
+        htmlEl.classList.contains("manual-page-break") ||
+        htmlEl.dataset.pageBreak === "true";
+      const isSeparator = htmlEl.tagName.toLowerCase() === "hr";
+
+      if (isManualBreak || isSeparator) {
+        htmlEl.remove();
+        removedAny = true;
+        continue;
+      }
+
+      if ((htmlEl.textContent || "").replace(/\u00a0/g, " ").trim().length === 0) {
+        htmlEl.remove();
+        removedAny = true;
+        continue;
+      }
+
+      break;
+    }
+
+    return removedAny;
   };
 
   const repaginateLocalEditors = () => {
@@ -531,22 +591,25 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, contentIdx: number) => {
     if (!isEditingVisual) return;
-    if (e.key !== "Delete") return;
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
 
     const htmls = activeContentPages.map((pageHtml, idx) => {
       const ref = editorRefs.current[idx];
       return ref ? ref.innerHTML : pageHtml;
     });
 
+    const movingForward = e.key === "Delete";
     const currentHtml = htmls[contentIdx] || "";
-    const hasNextPage = contentIdx + 1 < htmls.length;
+    const adjacentIdx = movingForward ? contentIdx + 1 : contentIdx - 1;
 
-    if (!hasNextPage) return;
+    if (adjacentIdx < 0 || adjacentIdx >= htmls.length) return;
 
-    const atEnd = isCursorAtEndOfEditable(e.currentTarget);
+    const atBoundary = movingForward
+      ? isCursorAtEndOfEditable(e.currentTarget)
+      : isCursorAtStartOfEditable(e.currentTarget);
     const trailingBreak = hasTrailingManualBreak(currentHtml);
 
-    if (!atEnd && !trailingBreak) return;
+    if (!atBoundary && !trailingBreak) return;
 
     e.preventDefault();
 
@@ -556,24 +619,13 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const parser = new DOMParser();
 
     const currentDoc = parser.parseFromString(currentHtml, "text/html");
-    const nextDoc = parser.parseFromString(htmls[contentIdx + 1] || "", "text/html");
+    const adjacentDoc = parser.parseFromString(htmls[adjacentIdx] || "", "text/html");
 
-    // Remover apenas quebras manuais no final da página atual
-    const currentBreaks = Array.from(currentDoc.body.querySelectorAll(".manual-page-break, [data-page-break='true']"));
-    const lastCurrentBreak = currentBreaks[currentBreaks.length - 1];
-    if (lastCurrentBreak) {
-      lastCurrentBreak.remove();
-    }
-
-    // Remover quebras manuais no início da próxima página, se existirem
-    const nextBreaks = Array.from(nextDoc.body.querySelectorAll(".manual-page-break, [data-page-break='true']"));
-    const firstNextBreak = nextBreaks[0];
-    if (firstNextBreak) {
-      firstNextBreak.remove();
-    }
+    stripBoundaryArtifacts(currentDoc, movingForward ? "end" : "start");
+    stripBoundaryArtifacts(adjacentDoc, movingForward ? "start" : "end");
 
     htmls[contentIdx] = currentDoc.body.innerHTML;
-    htmls[contentIdx + 1] = nextDoc.body.innerHTML;
+    htmls[adjacentIdx] = adjacentDoc.body.innerHTML;
 
     const joinedHtml = htmls.join("\n");
     const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
@@ -757,35 +809,35 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const tocLayoutProfile = useMemo(() => {
     if (settings.densityMode === 'compact') {
       return {
-        pageUnitCapacity: 31,
+        pageUnitCapacity: 32,
         firstPageReservedUnits: 3.2,
         charsPerLineByLevel: { 1: 38, 2: 48, 3: 56 },
         baseUnitsByLevel: { 1: 1.26, 2: 0.92, 3: 0.78 },
         extraLineUnits: 0.38,
-        targetFillRatio: 0.94,
+        targetFillRatio: 0.95,
         firstPageTargetFillRatio: 0.91,
       };
     }
 
     if (settings.densityMode === 'premium') {
       return {
-        pageUnitCapacity: 20,
+        pageUnitCapacity: 21,
         firstPageReservedUnits: 3.6,
         charsPerLineByLevel: { 1: 31, 2: 40, 3: 48 },
         baseUnitsByLevel: { 1: 1.5, 2: 1.08, 3: 0.92 },
         extraLineUnits: 0.5,
-        targetFillRatio: 0.92,
+        targetFillRatio: 0.93,
         firstPageTargetFillRatio: 0.88,
       };
     }
 
     return {
-      pageUnitCapacity: 26,
+      pageUnitCapacity: 28,
       firstPageReservedUnits: 3.3,
       charsPerLineByLevel: { 1: 35, 2: 45, 3: 53 },
-      baseUnitsByLevel: { 1: 1.34, 2: 0.98, 3: 0.84 },
-      extraLineUnits: 0.42,
-      targetFillRatio: 0.93,
+      baseUnitsByLevel: { 1: 1.24, 2: 0.9, 3: 0.78 },
+      extraLineUnits: 0.38,
+      targetFillRatio: 0.95,
       firstPageTargetFillRatio: 0.89,
     };
   }, [settings.densityMode]);
@@ -1125,7 +1177,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     if (alignment === 'center') alignmentClass = 'text-center';
     else if (alignment === 'right') alignmentClass = 'text-right';
 
-    const spacingClass = variant === 'toc' ? 'pb-2 mb-4' : 'pb-2 mb-6';
+    const spacingClass = variant === 'toc' ? 'pb-2 mb-3' : 'pb-2 mb-6';
 
     return (
       <div className={`text-[9pt] font-medium text-[var(--color-brand-azul)] border-b border-[var(--color-brand-linha)] header-print shrink-0 ${spacingClass} ${alignmentClass}`}>
@@ -1162,7 +1214,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     let footerTextAlignClass = footerAlign === 'center' ? 'text-center' : footerAlign === 'right' ? 'text-right' : 'text-left';
     let pageNumAlignClass = pageNumAlign === 'center' ? 'text-center' : pageNumAlign === 'right' ? 'text-right' : 'text-left';
 
-    const spacingClass = variant === 'toc' ? 'pt-3 mt-5' : 'pt-4 mt-8';
+    const spacingClass = variant === 'toc' ? 'pt-2 mt-4' : 'pt-4 mt-8';
 
     return (
       <div className={`text-[9pt] text-[var(--color-brand-azul)] flex ${justifyClass} items-end border-t border-[var(--color-brand-linha)] footer-print shrink-0 ${spacingClass}`}>
@@ -1851,14 +1903,16 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        )}
 
                        {p.type === 'aviso' && (
-                         <section id="aviso-page" className="page flex flex-col justify-between scroll-mt-6">
+                         <section id="aviso-page" className="page flex flex-col scroll-mt-6">
                             {renderHeader(false)}
                             
-                            <div className="box-cuidado w-full max-w-2xl mx-auto my-auto text-left">
-                                <h3 className="text-2xl font-display font-semibold mb-4">⚠️ Aviso Importante</h3>
-                                {(safeSettings.educationalWarning || '').split('\n\n').map((paragraph, i) => (
-                                    <p key={i} className="mb-4 last:mb-0 text-[#2F3437]">{paragraph}</p>
-                                ))}
+                            <div className="flex-grow flex items-center justify-center">
+                              <div className="box-cuidado w-full max-w-2xl mx-auto text-left">
+                                  <h3 className="text-2xl font-display font-semibold mb-4">⚠️ Aviso Importante</h3>
+                                  {(safeSettings.educationalWarning || '').split('\n\n').map((paragraph, i) => (
+                                      <p key={i} className="mb-4 last:mb-0 text-[#2F3437]">{paragraph}</p>
+                                  ))}
+                              </div>
                             </div>
 
                             {renderFooter(p.pageNum, false)}
@@ -1905,15 +1959,15 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                        >
                                          <span className={`text-left pr-2 pb-0 transition-colors duration-150 ${linkLeadingClass} ${
                                            entry.level === 1 
-                                            ? 'font-display font-bold text-[#245C5A] text-[15px] md:text-[15px] group-hover:text-[#C9826B]' 
+                                            ? 'font-display font-bold text-[#245C5A] text-[14px] md:text-[14px] group-hover:text-[#C9826B]' 
                                             : entry.level === 2
-                                              ? 'font-sans text-[13px] font-semibold text-[#3D4447] pl-4 group-hover:text-[#C9826B]'
-                                              : 'font-sans text-[12px] text-[#5C6466] pl-7 group-hover:text-[#C9826B]'
+                                              ? 'font-sans text-[12px] font-semibold text-[#3D4447] pl-4 group-hover:text-[#C9826B]'
+                                              : 'font-sans text-[11px] text-[#5C6466] pl-6 group-hover:text-[#C9826B]'
                                          }`}>
                                            {entry.title}
                                          </span>
-                                         <span className="flex-grow border-b border-dotted border-[#C9D8D5] mx-1.5 relative top-[-3px] group-hover:border-[#C9826B] transition-colors"></span>
-                                         <span className="font-mono text-[#6F8F9A] font-bold text-[13px] shrink-0 group-hover:text-[#C9826B] transition-colors">
+                                         <span className="flex-grow border-b border-dotted border-[#C9D8D5] mx-1 relative top-[-2px] group-hover:border-[#C9826B] transition-colors"></span>
+                                         <span className="font-mono text-[#6F8F9A] font-bold text-[12px] shrink-0 group-hover:text-[#C9826B] transition-colors">
                                            {entry.pageNumber}
                                          </span>
                                        </a>
