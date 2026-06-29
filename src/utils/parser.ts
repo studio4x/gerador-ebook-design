@@ -385,6 +385,15 @@ function convertChecklistSections(doc: Document) {
   const checklistIntroPattern = /(marque|assinale|sinalize|preencha|selecione).*(pontos|itens|opções|opcoes|campos|alternativas)/i;
 
   const isHeading = (node: Element) => /^h[1-6]$/i.test(node.tagName);
+  const isPromptLabel = (node: Element) => {
+    const tagName = node.tagName.toLowerCase();
+    if (!["p", "div"].includes(tagName)) return false;
+    if (node.querySelector("a, img, table")) return false;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text) return false;
+    if (text.length > 140) return false;
+    return /[:?]$/.test(text);
+  };
   const isShortChecklistCandidate = (node: Element, allowExpandedHeuristics = false) => {
     if (node.tagName.toLowerCase() !== "p") return false;
     if (node.querySelector("a, img, strong, em, table")) return false;
@@ -425,6 +434,7 @@ function convertChecklistSections(doc: Document) {
     let introNode: Element | null = null;
     let shouldTreatAsChecklist = checklistHeadingPattern.test(headingText);
     let allowExpandedHeuristics = false;
+    let seenNarrativeContent = false;
 
     if (cursor && cursor.tagName.toLowerCase() === "p") {
       const introText = (cursor.textContent || "").replace(/\s+/g, " ").trim();
@@ -436,13 +446,14 @@ function convertChecklistSections(doc: Document) {
       }
     }
 
-    if (!shouldTreatAsChecklist) return;
-
     const candidateNodes: Element[] = [];
     while (cursor && !isHeading(cursor)) {
       if (cursor.classList.contains("manual-page-break")) break;
 
       if (cursor.tagName.toLowerCase() === "ul" || cursor.tagName.toLowerCase() === "ol") {
+        if (!shouldTreatAsChecklist) {
+          break;
+        }
         const listItems = Array.from(cursor.querySelectorAll(":scope > li"));
         if (listItems.length >= 2) {
           listItems.forEach((item) => {
@@ -459,7 +470,20 @@ function convertChecklistSections(doc: Document) {
         }
       }
 
+      if (isPromptLabel(cursor)) {
+        const next = cursor.nextElementSibling;
+        if (next && isShortChecklistCandidate(next, true)) {
+          shouldTreatAsChecklist = true;
+          allowExpandedHeuristics = true;
+          cursor = next;
+          continue;
+        }
+      }
+
       if (!isShortChecklistCandidate(cursor, allowExpandedHeuristics)) {
+        if ((cursor.textContent || "").replace(/\s+/g, " ").trim()) {
+          seenNarrativeContent = true;
+        }
         break;
       }
 
@@ -467,7 +491,11 @@ function convertChecklistSections(doc: Document) {
       cursor = cursor.nextElementSibling;
     }
 
-    if (candidateNodes.length < 2) return;
+    if (!shouldTreatAsChecklist && candidateNodes.length >= 3 && !seenNarrativeContent) {
+      shouldTreatAsChecklist = true;
+    }
+
+    if (!shouldTreatAsChecklist || candidateNodes.length < 2) return;
 
     candidateNodes.forEach((paragraphNode) => {
       const text = (paragraphNode.textContent || "").replace(/\s+/g, " ").trim();
