@@ -127,6 +127,16 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return htmls;
   };
 
+  const normalizeSerializedPageHtml = (pageHtml: string): string => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(pageHtml, "text/html");
+
+    stripBoundaryArtifacts(doc, "start");
+    stripBoundaryArtifacts(doc, "end");
+
+    return doc.body.innerHTML.trim();
+  };
+
   function captureVisualSnapshot(): VisualSnapshot {
     const htmlByPage: Record<number, string> = {};
     Object.keys(editorRefs.current)
@@ -141,20 +151,11 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   }
 
   function serializeEditorDomToMarkdown(): string {
-     let fullHtml = '';
-     Object.keys(editorRefs.current).sort((a,b) => Number(a) - Number(b)).forEach(key => {
-        const ref = editorRefs.current[Number(key)];
-        if (ref) {
-          const clone = ref.cloneNode(true) as HTMLElement;
-          const breaks = clone.querySelectorAll('.manual-page-break, [data-page-break="true"]') as NodeListOf<HTMLElement>;
-          breaks.forEach(el => {
-             const marker = document.createElement("p");
-             marker.textContent = "[=== QUEBRA DE PÁGINA MANUAL ===]";
-             el.replaceWith(marker);
-          });
-          fullHtml += clone.innerHTML + '\n\n';
-        }
-     });
+     const pageHtmls = getEditorHtmlPages().map(normalizeSerializedPageHtml);
+     const pageBreakMarkup = '<div class="manual-page-break" data-page-break="true" contenteditable="false">&nbsp;</div>';
+     const fullHtml = pageHtmls
+       .map((pageHtml, index) => `${pageHtml}${index < pageHtmls.length - 1 ? `\n${pageBreakMarkup}\n` : ''}`)
+       .join('\n');
 
      const turndownService = new TurndownService({
          headingStyle: 'atx',
