@@ -5,7 +5,7 @@ import { Cloud, LogIn, LogOut, Save, DownloadCloud, Loader2, Trash2, Pencil, Che
 import { ContentBlock, ProjectSettings } from "../types";
 import {
   deleteCloudProject as apiDeleteCloudProject,
-  isServerApiAvailable,
+  isCloudServerApiAvailable,
   isServerApiUnavailableError,
   listCloudProjects,
   loadCloudProject,
@@ -54,7 +54,7 @@ export function CloudSync({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"Salvando..." | "Salvo" | "">("");
   const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([]);
-  const [serverApiAvailable, setServerApiAvailable] = useState<boolean>(() => isServerApiAvailable());
+  const [serverApiAvailable, setServerApiAvailable] = useState<boolean>(() => isCloudServerApiAvailable());
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectTitle, setEditingProjectTitle] = useState("");
 

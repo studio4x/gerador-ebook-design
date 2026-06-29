@@ -604,7 +604,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.143";
+  const buildVersionStr = "v1.4.144";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     const rawTitle = settings.title || "Ebook";
@@ -1617,6 +1617,7 @@ export default function App() {
 
       try {
         const response = await fetchServerApi("/api/export-pdf", {
+          capability: "pdf",
           method: "POST",
           headers: {
             "Content-Type": "application/json"

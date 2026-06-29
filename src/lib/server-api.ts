@@ -6,6 +6,7 @@ export class ServerApiUnavailableError extends Error {
 }
 
 type ServerApiStatus = "unknown" | "available" | "unavailable";
+type ServerApiCapability = "default" | "pdf" | "cloud";
 
 const configuredServerApiBaseUrl = (
   import.meta.env.VITE_SERVER_API_BASE_URL as string | undefined
@@ -35,42 +36,52 @@ function resolveServerApiInput(input: RequestInfo | URL): RequestInfo | URL {
   return input;
 }
 
-let serverApiStatus: ServerApiStatus = "unknown";
+const serverApiStatusByCapability: Record<ServerApiCapability, ServerApiStatus> = {
+  default: "unknown",
+  pdf: "unknown",
+  cloud: "unknown",
+};
 
-export function getServerApiStatus(): ServerApiStatus {
-  return serverApiStatus;
+type FetchServerApiOptions = RequestInit & {
+  capability?: ServerApiCapability;
+};
+
+export function getServerApiStatus(capability: ServerApiCapability = "default"): ServerApiStatus {
+  return serverApiStatusByCapability[capability];
 }
 
-export function isServerApiAvailable(): boolean {
-  return serverApiStatus !== "unavailable";
+export function isServerApiAvailable(capability: ServerApiCapability = "default"): boolean {
+  return getServerApiStatus(capability) !== "unavailable";
 }
 
-export function markServerApiAvailable() {
-  serverApiStatus = "available";
+export function markServerApiAvailable(capability: ServerApiCapability = "default") {
+  serverApiStatusByCapability[capability] = "available";
 }
 
-export function markServerApiUnavailable() {
-  serverApiStatus = "unavailable";
+export function markServerApiUnavailable(capability: ServerApiCapability = "default") {
+  serverApiStatusByCapability[capability] = "unavailable";
 }
 
 export function isServerApiUnavailableError(error: unknown): error is ServerApiUnavailableError {
   return error instanceof ServerApiUnavailableError;
 }
 
-export async function fetchServerApi(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (!isServerApiAvailable()) {
+export async function fetchServerApi(input: RequestInfo | URL, init?: FetchServerApiOptions): Promise<Response> {
+  const { capability = "default", ...requestInit } = init || {};
+
+  if (!isServerApiAvailable(capability)) {
     throw new ServerApiUnavailableError();
   }
 
   try {
-    const response = await fetch(resolveServerApiInput(input), init);
+    const response = await fetch(resolveServerApiInput(input), requestInit);
 
     if (response.status === 404) {
-      markServerApiUnavailable();
+      markServerApiUnavailable(capability);
       throw new ServerApiUnavailableError();
     }
 
-    markServerApiAvailable();
+    markServerApiAvailable(capability);
     return response;
   } catch (error) {
     if (error instanceof ServerApiUnavailableError) {
@@ -78,7 +89,7 @@ export async function fetchServerApi(input: RequestInfo | URL, init?: RequestIni
     }
 
     if (error instanceof TypeError) {
-      markServerApiUnavailable();
+      markServerApiUnavailable(capability);
       throw new ServerApiUnavailableError();
     }
 

@@ -33,6 +33,7 @@ export type CloudProjectPayload = CloudUser & {
 
 async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetchServerApi(input, {
+    capability: "cloud",
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -94,4 +95,5 @@ export async function deleteCloudProject(input: { userId: string; projectId: str
   );
 }
 
-export { isServerApiAvailable, isServerApiUnavailableError };
+export const isCloudServerApiAvailable = () => isServerApiAvailable("cloud");
+export { isServerApiUnavailableError };
