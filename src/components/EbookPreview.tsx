@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ProjectSettings, DEFAULT_SETTINGS } from '../types';
 import TurndownService from 'turndown';
-import { chunkIntoPages } from '../utils/paginator';
 import { getHybridPrintMetrics, getPageFormatSpec } from '../utils/printProfile';
 import { 
   BookOpen, 
@@ -115,6 +114,19 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const visualUndoStackRef = useRef<VisualSnapshot[]>([]);
   const visualRedoStackRef = useRef<VisualSnapshot[]>([]);
 
+  const getEditorHtmlPages = () => {
+    const htmls: string[] = [];
+    Object.keys(editorRefs.current)
+      .sort((a, b) => Number(a) - Number(b))
+      .forEach((key) => {
+        const ref = editorRefs.current[Number(key)];
+        if (ref) {
+          htmls.push(ref.innerHTML);
+        }
+      });
+    return htmls;
+  };
+
   function captureVisualSnapshot(): VisualSnapshot {
     const htmlByPage: Record<number, string> = {};
     Object.keys(editorRefs.current)
@@ -125,7 +137,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
           htmlByPage[Number(key)] = ref.innerHTML;
         }
       });
-    return { htmlByPage, contentPages: [...activeContentPages] };
+    return { htmlByPage, contentPages: getEditorHtmlPages() };
   }
 
   function serializeEditorDomToMarkdown(): string {
@@ -444,18 +456,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   };
 
   const repaginateLocalEditors = () => {
-    const htmls: string[] = [];
-    Object.keys(editorRefs.current)
-      .sort((a, b) => Number(a) - Number(b))
-      .forEach((key) => {
-        const ref = editorRefs.current[Number(key)];
-        if (ref) {
-          htmls.push(ref.innerHTML);
-        }
-      });
-    const joinedHtml = htmls.join("\n");
-    const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
-    setLocalContentPages(paginatedPages);
+    setLocalContentPages(getEditorHtmlPages());
   };
 
   const normalizeManualBreaksForClipboard = (html: string): string => {
@@ -684,6 +685,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const movingForward = e.key === "Delete";
     const currentHtml = htmls[contentIdx] || "";
     const adjacentIdx = movingForward ? contentIdx + 1 : contentIdx - 1;
+    const currentRef = editorRefs.current[contentIdx];
+    const adjacentRef = editorRefs.current[adjacentIdx];
 
     if (adjacentIdx < 0 || adjacentIdx >= htmls.length) return;
 
@@ -730,13 +733,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     htmls[contentIdx] = currentDoc.body.innerHTML;
     htmls[adjacentIdx] = adjacentDoc.body.innerHTML;
 
-    const joinedHtml = htmls.join("\n");
-    const paginatedPages = chunkIntoPages(joinedHtml, settings.densityMode);
+    if (currentRef) {
+      currentRef.innerHTML = htmls[contentIdx];
+    }
+    if (adjacentRef) {
+      adjacentRef.innerHTML = htmls[adjacentIdx];
+    }
 
-    setLocalContentPages(paginatedPages);
-    
-    // We already repaginated, but we could have also just called repaginateLocalEditors()
-    // It's ok since this handles current page logic.
+    repaginateLocalEditors();
   };
 
   // Lock body scroll when fullscreen is active to avoid double scrolling
