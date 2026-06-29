@@ -64,6 +64,16 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
     });
   
   const flushPage = () => {
+    if (
+      currentPageNodes.length === 1 &&
+      currentPageNodes[0].classList.contains('chapter-opener')
+    ) {
+      pages.push(currentPageNodes.map(n => n.outerHTML).join('\n'));
+      currentPageNodes = [];
+      currentHeightUnits = 0;
+      return;
+    }
+
     // Check for orphan headings at the end of the page
     // A heading needs at least 2 non-heading elements after it on the same page.
     const orphanNodes: Element[] = [];
@@ -323,6 +333,16 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
                              normText.includes('sobre a autora') || 
                              normText.includes('sobre o autor') || 
                              normText.includes('sobre deyse simon');
+
+    if (isChapterOpener) {
+      if (currentPageNodes.length > 0) {
+        flushPage();
+      }
+      currentPageNodes.push(node);
+      currentHeightUnits += nodeCost;
+      flushPage();
+      continue;
+    }
 
     if (currentPageNodes.length > 0) {
       if (isChapterOpener || isProfileSection) {
