@@ -360,6 +360,64 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return removedAny;
   };
 
+  const getTransferableBoundaryChild = (doc: Document, side: 'start' | 'end'): HTMLElement | null => {
+    const elements = Array.from(doc.body.children) as HTMLElement[];
+    const ordered = side === 'start' ? elements : [...elements].reverse();
+
+    for (const element of ordered) {
+      const isManualBreak =
+        element.classList.contains("manual-page-break") ||
+        element.dataset.pageBreak === "true";
+      const isSeparator = element.tagName.toLowerCase() === "hr";
+
+      if (isManualBreak || isSeparator) continue;
+      if ((element.textContent || "").replace(/\u00a0/g, " ").trim().length === 0) continue;
+
+      return element;
+    }
+
+    return null;
+  };
+
+  const appendManualBreakMarker = (doc: Document) => {
+    const marker = doc.createElement("div");
+    marker.className = "manual-page-break";
+    marker.setAttribute("data-page-break", "true");
+    marker.setAttribute("contenteditable", "false");
+    marker.innerHTML = "&nbsp;";
+    doc.body.appendChild(marker);
+  };
+
+  const pageDocHasMeaningfulContent = (doc: Document) => {
+    return Array.from(doc.body.children).some((node) => {
+      const element = node as HTMLElement;
+      const isManualBreak =
+        element.classList.contains("manual-page-break") ||
+        element.dataset.pageBreak === "true";
+      const isSeparator = element.tagName.toLowerCase() === "hr";
+
+      if (isManualBreak || isSeparator) return false;
+      if (element.classList.contains("chapter-opener")) return true;
+      if (
+        element.classList.contains("checklist-item") ||
+        element.classList.contains("fill-line") ||
+        element.classList.contains("box-cuidado") ||
+        element.classList.contains("box-informativo") ||
+        element.classList.contains("box-reflexao") ||
+        element.classList.contains("frase-central")
+      ) {
+        return true;
+      }
+      if (
+        element.matches("img, svg, canvas, table, ul, ol, blockquote") ||
+        element.querySelector("img, svg, canvas, table, ul, ol, blockquote")
+      ) {
+        return true;
+      }
+      return (element.textContent || "").replace(/\u00a0/g, " ").trim().length > 0;
+    });
+  };
+
   const repaginateLocalEditors = () => {
     const htmls: string[] = [];
     Object.keys(editorRefs.current)
@@ -621,8 +679,28 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     const currentDoc = parser.parseFromString(currentHtml, "text/html");
     const adjacentDoc = parser.parseFromString(htmls[adjacentIdx] || "", "text/html");
 
-    stripBoundaryArtifacts(currentDoc, movingForward ? "end" : "start");
-    stripBoundaryArtifacts(adjacentDoc, movingForward ? "start" : "end");
+    const removedCurrentArtifacts = stripBoundaryArtifacts(currentDoc, movingForward ? "end" : "start");
+    const removedAdjacentArtifacts = stripBoundaryArtifacts(adjacentDoc, movingForward ? "start" : "end");
+
+    const leftDoc = movingForward ? currentDoc : adjacentDoc;
+    const rightDoc = movingForward ? adjacentDoc : currentDoc;
+
+    const transferNode = getTransferableBoundaryChild(rightDoc, "start");
+
+    if (transferNode) {
+      const htmlToMove = transferNode.outerHTML;
+      transferNode.remove();
+      leftDoc.body.insertAdjacentHTML("beforeend", htmlToMove);
+
+      stripBoundaryArtifacts(leftDoc, "end");
+      stripBoundaryArtifacts(rightDoc, "start");
+
+      if (pageDocHasMeaningfulContent(rightDoc)) {
+        appendManualBreakMarker(leftDoc);
+      }
+    } else if (!removedCurrentArtifacts && !removedAdjacentArtifacts) {
+      return;
+    }
 
     htmls[contentIdx] = currentDoc.body.innerHTML;
     htmls[adjacentIdx] = adjacentDoc.body.innerHTML;
