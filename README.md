@@ -42,6 +42,7 @@ O comando acima sobe o frontend Vite junto com o servidor Express definido em `s
 - `VITE_SUPABASE_ANON_KEY`: chave pública do Supabase
 - `VITE_APP_URL`: URL pública do app para redirecionamento OAuth
 - `VITE_SERVER_API_BASE_URL`: URL opcional de uma API externa quando o frontend estiver em um host estático sem `server.ts`
+- `VITE_ENABLE_CLOUD_SYNC`: habilita a sincronização em nuvem fora do localhost quando a rota `/api/cloud/*` estiver realmente publicada
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: envio de e-mail
 
 Consulte o modelo em [.env.example](.env.example).
@@ -61,6 +62,7 @@ Consulte o modelo em [.env.example](.env.example).
 - Em ambientes onde `/api/export-pdf` não estiver disponível, o cliente possui fallback de geração local no navegador
 - Se houver `404` em `/api/cloud/projects`, o ambiente provavelmente está sem as rotas de sincronização em nuvem publicadas no mesmo host
 - O build do Vercel não instala o Chrome local do Puppeteer; a função serverless usa `@sparticuz/chromium` para evitar estouro do limite de upload
+- O cloud sync fica desativado por padrão fora do localhost e deve ser habilitado explicitamente com `VITE_ENABLE_CLOUD_SYNC=true` quando a API de nuvem estiver disponível
 
 ## Publicação
 

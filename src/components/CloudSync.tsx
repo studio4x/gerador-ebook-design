@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { auth, signInWithGoogle } from "../lib/firebase";
+import { auth, isCloudSyncEnabled, signInWithGoogle } from "../lib/firebase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { Cloud, LogIn, LogOut, Save, DownloadCloud, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { ContentBlock, ProjectSettings } from "../types";
@@ -50,11 +50,12 @@ export function CloudSync({
   showToast: (msg: string, type: "success" | "error" | "info") => void;
 }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const cloudSyncEnabled = isCloudSyncEnabled();
   const [showModal, setShowModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"Salvando..." | "Salvo" | "">("");
   const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([]);
-  const [serverApiAvailable, setServerApiAvailable] = useState<boolean>(() => isCloudServerApiAvailable());
+  const [serverApiAvailable, setServerApiAvailable] = useState<boolean>(() => cloudSyncEnabled && isCloudServerApiAvailable());
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectTitle, setEditingProjectTitle] = useState("");
 
@@ -82,6 +83,8 @@ export function CloudSync({
   };
 
   useEffect(() => {
+    if (!cloudSyncEnabled) return;
+
     let active = true;
 
     auth.getSession().then(({ data: { session } }) => {
@@ -96,10 +99,10 @@ export function CloudSync({
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [cloudSyncEnabled]);
 
   const loadCloudProjects = async () => {
-    if (!user || !serverApiAvailable) return;
+    if (!cloudSyncEnabled || !user || !serverApiAvailable) return;
     try {
       setCloudProjects(await listCloudProjects(user.id));
       setServerApiAvailable(true);
@@ -115,7 +118,7 @@ export function CloudSync({
   };
 
   const findProjectByNormalizedTitle = async (normalizedTitle: string, excludeId?: string): Promise<CloudProject | null> => {
-    if (!user || !serverApiAvailable) return null;
+    if (!cloudSyncEnabled || !user || !serverApiAvailable) return null;
     try {
       const projects = await listCloudProjects(user.id);
       return projects.find((project) => project.normalized_title === normalizedTitle && project.id !== excludeId) || null;
@@ -143,7 +146,7 @@ export function CloudSync({
   };
 
   const saveToCloud = async (silent = false) => {
-    if (!user) return;
+    if (!cloudSyncEnabled || !user) return;
     if (!serverApiAvailable) {
       if (!silent) {
         showToast("Sincronização em nuvem indisponível nesta implantação.", "info");
@@ -209,7 +212,7 @@ export function CloudSync({
   };
 
   useEffect(() => {
-    if (!user || !serverApiAvailable || blocks.length === 0) return;
+    if (!cloudSyncEnabled || !user || !serverApiAvailable || blocks.length === 0) return;
     const timer = setTimeout(() => {
       void saveToCloud(true);
     }, 5000);
@@ -244,7 +247,7 @@ export function CloudSync({
   };
 
   const saveProjectTitle = async (proj: CloudProject) => {
-    if (!user) return;
+    if (!cloudSyncEnabled || !user) return;
 
     const nextTitle = editingProjectTitle.trim();
     if (!nextTitle) {
@@ -319,7 +322,15 @@ export function CloudSync({
           </span>
         )}
 
-        {!user ? (
+        {!cloudSyncEnabled ? (
+          <button
+            disabled
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 bg-white border border-gray-200 rounded-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Sincronização em nuvem desativada nesta implantação"
+          >
+            <Cloud size={13} /> Nuvem indisponível
+          </button>
+        ) : !user ? (
           <button
             onClick={handleLogin}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-md transition-colors"
