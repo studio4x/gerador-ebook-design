@@ -117,6 +117,11 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
                 <h1 style="border:none; margin:0; padding:0">${title || originalText}</h1>
             `;
             heading.parentNode?.replaceChild(opener, heading);
+
+            const chapterBreak = doc.createElement('div');
+            chapterBreak.className = 'manual-page-break';
+            chapterBreak.setAttribute('data-page-break', 'true');
+            opener.parentNode?.insertBefore(chapterBreak, opener.nextSibling);
         }
     }
   });
