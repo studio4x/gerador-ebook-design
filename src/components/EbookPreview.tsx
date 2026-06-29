@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ProjectSettings, DEFAULT_SETTINGS } from '../types';
 import TurndownService from 'turndown';
+import { splitHtmlByManualPageBreaks } from '../utils/paginator';
 import { getHybridPrintMetrics, getPageFormatSpec } from '../utils/printProfile';
 import { 
   BookOpen, 
@@ -127,6 +128,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return htmls;
   };
 
+  const pageBreakMarkup = '<div class="manual-page-break" data-page-break="true" contenteditable="false">&nbsp;</div>';
+
   const normalizeSerializedPageHtml = (pageHtml: string): string => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(pageHtml, "text/html");
@@ -135,6 +138,22 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     stripBoundaryArtifacts(doc, "end");
 
     return doc.body.innerHTML.trim();
+  };
+
+  const deriveLocalContentPagesFromEditor = (pageHtmls: string[]) => {
+    const normalizedPages = pageHtmls
+      .map(normalizeSerializedPageHtml)
+      .filter((pageHtml) => pageHtml.length > 0);
+
+    if (normalizedPages.length === 0) {
+      return [];
+    }
+
+    const combinedHtml = normalizedPages
+      .map((pageHtml, index) => `${pageHtml}${index < normalizedPages.length - 1 ? `\n${pageBreakMarkup}\n` : ''}`)
+      .join('\n');
+
+    return splitHtmlByManualPageBreaks(combinedHtml);
   };
 
   function captureVisualSnapshot(): VisualSnapshot {
@@ -147,12 +166,11 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
           htmlByPage[Number(key)] = ref.innerHTML;
         }
       });
-    return { htmlByPage, contentPages: getEditorHtmlPages() };
+    return { htmlByPage, contentPages: deriveLocalContentPagesFromEditor(getEditorHtmlPages()) };
   }
 
   function serializeEditorDomToMarkdown(): string {
      const pageHtmls = getEditorHtmlPages().map(normalizeSerializedPageHtml);
-     const pageBreakMarkup = '<div class="manual-page-break" data-page-break="true" contenteditable="false">&nbsp;</div>';
      const fullHtml = pageHtmls
        .map((pageHtml, index) => `${pageHtml}${index < pageHtmls.length - 1 ? `\n${pageBreakMarkup}\n` : ''}`)
        .join('\n');
@@ -457,7 +475,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   };
 
   const repaginateLocalEditors = () => {
-    setLocalContentPages(getEditorHtmlPages());
+    setLocalContentPages(deriveLocalContentPagesFromEditor(getEditorHtmlPages()));
   };
 
   const normalizeManualBreaksForClipboard = (html: string): string => {
