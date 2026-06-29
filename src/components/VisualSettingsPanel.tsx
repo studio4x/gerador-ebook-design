@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { ProjectSettings } from '../types';
+import { PAGE_FORMATS } from '../utils/printProfile';
 
 interface VisualSettingsPanelProps {
   settings: ProjectSettings;
@@ -84,6 +85,7 @@ Você pode carregar este arquivo de volta na aba "Definições Visuais" para res
 
 ## Opções Visuais de Layout
 - Modo de Distribuição: ${localSettings.densityMode || 'comfortable'}
+- Formato do Material: ${PAGE_FORMATS.find((item) => item.id === (localSettings.pageFormat || 'a4'))?.label || 'A4 vertical'}
 - Gerar Sumário: ${localSettings.generateToc !== false ? 'sim' : 'não'}
 - Borda da Página: ${localSettings.pageBorder ? 'sim' : 'não'}
 - Cabeçalho: ${localSettings.headerText || ''}
@@ -117,6 +119,8 @@ Você pode carregar este arquivo de volta na aba "Definições Visuais" para res
 - WhatsApp: ${localSettings.whatsapp || ''}
 - URL Agendamento: ${localSettings.schedulingUrl || ''}
 - Endereço: ${localSettings.contactAddress || ''}
+- Ano da Edição: ${localSettings.editionYear || ''}
+- ISBN: ${localSettings.isbn || ''}
 - Etiqueta da Capa: ${localSettings.coverBadgeText || 'E-book educativo'}
 ${localSettings.coverImageUrl ? `- Imagem de Capa: ${localSettings.coverImageUrl}\n` : ''}
 `;
@@ -165,6 +169,15 @@ ${localSettings.coverImageUrl ? `- Imagem de Capa: ${localSettings.coverImageUrl
         <section>
           <h3 className="text-sm font-bold text-[#245C5A] uppercase tracking-wider mb-4 border-b pb-2">3. Layout da página</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Formato Final do PDF">
+              <select className="w-full border-gray-300 rounded-md text-sm" value={localSettings.pageFormat || 'a4'} onChange={e => handleChange('pageFormat', e.target.value)}>
+                {PAGE_FORMATS.map((format) => (
+                  <option key={format.id} value={format.id}>
+                    {format.label} ({format.widthCmLabel})
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Densidade Visual">
               <select className="w-full border-gray-300 rounded-md text-sm" value={localSettings.densityMode || 'comfortable'} onChange={e => handleChange('densityMode', e.target.value)}>
                 <option value="compact">Compacto</option>
@@ -251,6 +264,9 @@ ${localSettings.coverImageUrl ? `- Imagem de Capa: ${localSettings.coverImageUrl
               </div>
             </Field>
           </div>
+          <p className="text-xs text-gray-400 mt-2">
+            O PDF final é híbrido: continua bom para leitura digital, mas já sai com formato físico real e margens seguras para impressão.
+          </p>
         </section>
 
         {/* 4. Cabeçalho e rodapé */}
@@ -325,6 +341,8 @@ ${localSettings.coverImageUrl ? `- Imagem de Capa: ${localSettings.coverImageUrl
              <Field label="WhatsApp (Link)"><input type="text" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.whatsapp || ''} onChange={e => handleChange('whatsapp', e.target.value)} /></Field>
              <Field label="URL de Agendamento"><input type="text" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.schedulingUrl || ''} onChange={e => handleChange('schedulingUrl', e.target.value)} /></Field>
              <Field label="Endereço Físico / Contato"><input type="text" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.contactAddress || ''} onChange={e => handleChange('contactAddress', e.target.value)} /></Field>
+             <Field label="Ano da Edição"><input type="text" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.editionYear || ''} onChange={e => handleChange('editionYear', e.target.value)} /></Field>
+             <Field label="ISBN (opcional)"><input type="text" className="w-full border-gray-300 rounded-md text-sm" value={localSettings.isbn || ''} onChange={e => handleChange('isbn', e.target.value)} /></Field>
           </div>
         </section>
 

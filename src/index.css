@@ -30,8 +30,8 @@
   .ebook-preview-container {
     padding: 0 !important;
     margin: 0 !important;
-    width: 210mm !important;
-    max-width: 210mm !important;
+    width: var(--page-width, 210mm) !important;
+    max-width: var(--page-width, 210mm) !important;
     height: auto !important;
     min-height: 0 !important;
   }
@@ -93,22 +93,30 @@ h1, h2, h3, h4, h5 {
 
 /* A4 Page Simulation for screen */
 .page {
-  width: 210mm;
-  height: 297mm;
-  max-height: 297mm;
+  width: var(--page-width, 210mm);
+  height: var(--page-height, 297mm);
+  max-height: var(--page-height, 297mm);
   background-color: var(--color-brand-offwhite);
   color: var(--color-brand-grafite);
   margin: 2rem auto;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   position: relative;
   box-sizing: border-box;
-  padding: 30mm 20mm 20mm 30mm; /* ABNT: top 3cm, right 2cm, bottom 2cm, left 3cm */
+  padding-top: var(--page-padding-top, 20mm);
+  padding-bottom: var(--page-padding-bottom, 20mm);
+  padding-left: var(--page-padding-inner, 20mm);
+  padding-right: var(--page-padding-outer, 20mm);
   overflow: hidden;
   font-family: var(--font-sans);
   line-height: var(--ebook-line-height, 1.45);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+}
+
+.page.is-even {
+  padding-left: var(--page-padding-outer, 20mm);
+  padding-right: var(--page-padding-inner, 20mm);
 }
 
 /* Custom Markdown Content Styling */
@@ -358,11 +366,11 @@ h1, h2, h3, h4, h5 {
 }
 
 .checklist-box {
-  width: 12px;
-  height: 12px;
+  width: 5.5mm;
+  height: 5.5mm;
   border: 1px solid var(--color-brand-petroleo, #245C5A) !important;
   border-radius: 2px !important;
-  margin-top: 5px !important;
+  margin-top: 2px !important;
   box-sizing: border-box !important;
   flex-shrink: 0 !important;
   background-color: transparent !important;

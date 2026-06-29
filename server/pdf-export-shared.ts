@@ -5,6 +5,8 @@ export type PdfExportRequestPayload = {
   css?: string;
   fontFamily?: string;
   fontDisplay?: string;
+  pageWidthMm?: number;
+  pageHeightMm?: number;
 };
 
 function buildFontLink(payload: PdfExportRequestPayload) {
@@ -13,6 +15,8 @@ function buildFontLink(payload: PdfExportRequestPayload) {
   if (payload.fontDisplay) fontsToLoad.add(payload.fontDisplay);
 
   fontsToLoad.add("Inter");
+  fontsToLoad.add("Lato");
+  fontsToLoad.add("Montserrat");
   fontsToLoad.add("Playfair Display");
   fontsToLoad.add("Poppins");
 
@@ -24,6 +28,9 @@ function buildFontLink(payload: PdfExportRequestPayload) {
 }
 
 function buildPdfHtml(payload: PdfExportRequestPayload) {
+  const pageWidthMm = payload.pageWidthMm || 210;
+  const pageHeightMm = payload.pageHeightMm || 297;
+
   return `
     <!DOCTYPE html>
     <html>
@@ -32,7 +39,7 @@ function buildPdfHtml(payload: PdfExportRequestPayload) {
         <style>
           ${payload.css || ""}
           @page {
-            size: A4 portrait;
+            size: ${pageWidthMm}mm ${pageHeightMm}mm;
             margin: 0;
           }
           body {
@@ -50,8 +57,8 @@ function buildPdfHtml(payload: PdfExportRequestPayload) {
           .ebook-preview-container {
             padding: 0 !important;
             margin: 0 !important;
-            width: 210mm !important;
-            max-width: 210mm !important;
+            width: ${pageWidthMm}mm !important;
+            max-width: ${pageWidthMm}mm !important;
             height: auto !important;
             min-height: 0 !important;
           }
@@ -77,9 +84,9 @@ function buildPdfHtml(payload: PdfExportRequestPayload) {
             break-after: avoid !important;
           }
           .pdf-page, .page {
-            width: 210mm !important;
-            height: 297mm !important;
-            max-height: 297mm !important;
+            width: ${pageWidthMm}mm !important;
+            height: ${pageHeightMm}mm !important;
+            max-height: ${pageHeightMm}mm !important;
             overflow: hidden !important;
             box-sizing: border-box !important;
             position: relative !important;
@@ -147,7 +154,8 @@ export async function renderPdfPage(page: Page, payload: PdfExportRequestPayload
   }
 
   const pdfBuffer = await page.pdf({
-    format: "A4",
+    width: `${payload.pageWidthMm || 210}mm`,
+    height: `${payload.pageHeightMm || 297}mm`,
     printBackground: true,
     preferCSSPageSize: true,
     margin: {

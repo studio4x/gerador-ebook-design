@@ -44,6 +44,20 @@ export function parseHandoffMarkdown(markdown: string): Partial<ProjectSettings>
     result.generateToc = norm.includes('sim') || norm.includes('true');
   }
 
+  const formatVal = findValue(/(?:Formato do Material|Formato|Page Format|pageFormat):\s*(A4|16\s*x\s*23|11,?5\s*x\s*18|20\s*x\s*20)/i);
+  if (formatVal) {
+    const normalized = formatVal.toLowerCase().replace(/\s+/g, '');
+    if (normalized.includes('16x23')) {
+      result.pageFormat = '16x23';
+    } else if (normalized.includes('11,5x18') || normalized.includes('11.5x18') || normalized.includes('11,5x18')) {
+      result.pageFormat = '11_5x18';
+    } else if (normalized.includes('20x20')) {
+      result.pageFormat = '20x20';
+    } else {
+      result.pageFormat = 'a4';
+    }
+  }
+
   // 3. Theme Colors (Visual Design Options)
   const primaryColorMatch = markdown.match(/(?:Cor Primária|Menta Escura|Petróleo|Primary Color|primaryColor)[:\|\s]*#([A-Fa-f0-9]{6})/i);
   if (primaryColorMatch && primaryColorMatch[1]) {
@@ -158,6 +172,16 @@ export function parseHandoffMarkdown(markdown: string): Partial<ProjectSettings>
 
   // NO LONGER parsing content variables (title, subtitle, brand, author bio, warning, ctaText)
   // because the user requested that all content MUST come from the content files.
+
+  const editionYear = findValue(/(?:Ano da Edição|Ano|editionYear):\s*(\d{4})/i);
+  if (editionYear) {
+    result.editionYear = editionYear;
+  }
+
+  const isbn = findValue(/(?:ISBN):\s*([0-9Xx\- ]{10,20})/i);
+  if (isbn) {
+    result.isbn = isbn;
+  }
 
   return result;
 }

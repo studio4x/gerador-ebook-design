@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   ProjectSettings,
   ContentBlock,
@@ -13,6 +13,13 @@ import { chunkIntoPages } from "./utils/paginator";
 import { EbookPreview } from "./components/EbookPreview";
 import { VisualSettingsPanel } from "./components/VisualSettingsPanel";
 import { parseHandoffMarkdown, LayoutRevision } from "./utils/handoffParser";
+import {
+  buildHybridChecklists,
+  buildHybridPdfFileName,
+  generateQrCodeDataUrl,
+  getHybridPrintMetrics,
+  getPageFormatSpec,
+} from "./utils/printProfile";
 import {
   FileText,
   LayoutTemplate,
@@ -47,7 +54,6 @@ import { User as SupabaseUser } from "@supabase/supabase-js";
 
 type PdfDownloadInfo = {
   fileName: string;
-  markAsDownloaded: () => void;
 };
 
 function safeUUID(): string {
@@ -59,31 +65,41 @@ function safeUUID(): string {
 
 export default function App() {
   const initialSettings: ProjectSettings = {
-    title: "Nome do Seu Livro",
-    shortTitle: "Nome Curto",
+    title: "Nome do Seu E-book",
+    shortTitle: "Conexão Seres",
     densityMode: "comfortable",
+    pageFormat: "a4",
     subtitle:
-      "Subtítulo do seu livro digital",
-    supportPhrase: "Uma frase de apoio ou destaque.",
-    professionalName: "Seu Nome",
-    professionalTitle: "Sua Profissão",
-    professionalReg: "Seu Registro",
-    brand: "Sua Marca",
-    website: "https://seusite.com.br",
+      "Material educativo preparado para tela e para impressão física.",
+    supportPhrase: "Leitura acolhedora, clara e tecnicamente segura para diferentes formatos de uso.",
+    professionalName: "Dra. Deyse Simon",
+    professionalTitle: "Terapeuta Ocupacional e Psicanalista",
+    professionalReg: "CREFITO-3/21465-TO",
+    brand: "Conexão Seres",
+    website: "https://conexaoseres.com.br",
     materialType: "E-book educativo",
-    targetAudience: "Seu Público Alvo",
+    targetAudience: "Adolescentes e adultos neurodivergentes, especialmente adultos autistas",
     ctaText:
-      "Se este material fez sentido para você, talvez seja importante olhar para sua situação de forma mais individualizada.\n\nEntre em contato conosco para saber mais.",
-    ctaButtonText: "Falar com a gente",
+      "Quer conversar com a Conexão Seres?\n\nAcesse o canal oficial, salve este link e use o QR Code desta página caso esteja lendo no papel.",
+    ctaButtonText: "Fale com a Conexão Seres",
     contactAddress:
-      "Seu Endereço Completo",
-    instagram: "@seu.instagram",
-    email: "contato@seusite.com.br",
-    whatsapp: "https://wa.me/5511999999999",
-    schedulingUrl: "https://seusite.com.br/agendar",
+      "Rua Petrobrás, 683 - Vila Antonieta - São Paulo/SP - CEP 03474-060",
+    instagram: "@conexao.seres",
+    email: "contato@conexaoseres.com.br",
+    whatsapp: "https://wa.me/5511964818096",
+    schedulingUrl: "https://conexaoseres.com.br/agendar-avaliacao-e-contato/",
     educationalWarning:
-      "Este material tem caráter educativo e não substitui avaliação, diagnóstico ou acompanhamento profissional individualizado.",
+      "Este material tem caráter educativo e não substitui avaliação, diagnóstico ou acompanhamento profissional individualizado. Cada pessoa possui uma história, um contexto, necessidades e possibilidades próprias. Em caso de dúvidas ou dificuldades persistentes, procure um profissional habilitado.",
+    editionYear: new Date().getFullYear().toString(),
+    isbn: "",
     generateToc: true,
+    primaryColor: "#245C5A",
+    secondaryColor: "#C9826B",
+    accentColor: "#6F8F9A",
+    backgroundColor: "#FAF8F4",
+    textColor: "#2F3437",
+    fontDisplay: "Poppins",
+    fontFamily: "Inter",
   };
 
   const defaultRev: LayoutRevision = {
@@ -97,6 +113,7 @@ export default function App() {
       "**Título:** Nome do Seu Livro",
       "**Subtítulo:** Subtítulo do seu livro digital",
       "**Modo de Distribuição:** confortável",
+      "**Formato do Material:** A4",
       "**Gerar Sumário:** sim",
       "**Borda da Página:** não",
       "**Cabeçalho Descritivo:** sim",
@@ -105,6 +122,7 @@ export default function App() {
       "**Texto do Rodapé:** Sua Marca | Livro Digital",
       "**Alinhamento do Rodapé:** esquerda",
       "**Numeração de Página:** direita",
+      `**Ano da Edição:** ${new Date().getFullYear()}`,
     ].join("\n"),
   };
 
@@ -287,6 +305,7 @@ export default function App() {
     type: "success" | "error" | "info";
   } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [ctaQrCodeDataUrl, setCtaQrCodeDataUrl] = useState("");
 
   const showToast = (
     message: string,
@@ -303,6 +322,33 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  useEffect(() => {
+    const ctaUrl = settings.schedulingUrl || settings.whatsapp || settings.website || "";
+    let cancelled = false;
+
+    if (!ctaUrl) {
+      setCtaQrCodeDataUrl("");
+      return;
+    }
+
+    generateQrCodeDataUrl(ctaUrl)
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setCtaQrCodeDataUrl(dataUrl);
+        }
+      })
+      .catch((error) => {
+        console.error("Falha ao gerar QR Code:", error);
+        if (!cancelled) {
+          setCtaQrCodeDataUrl("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.schedulingUrl, settings.whatsapp, settings.website]);
 
   // Save to localStorage whenever things change
   useEffect(() => {
@@ -562,7 +608,7 @@ export default function App() {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isExportingPdf) {
-        const msg = "A geração do seu PDF de alta fidelidade está em andamento. Para garantir que o PDF seja finalizado e salvo com sucesso, por favor mantenha esta aba aberta.";
+        const msg = "A geração do seu PDF híbrido está em andamento. Para garantir que o arquivo final seja concluído corretamente, mantenha esta aba aberta.";
         e.preventDefault();
         e.returnValue = msg;
         return msg;
@@ -604,37 +650,42 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.151";
+  const buildVersionStr = "v1.4.152";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
-    const rawTitle = settings.title || "Ebook";
-
-    const removeAccents = (value: string): string => {
-      return value
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[çÇ]/g, (match) => (match === "ç" ? "c" : "C"));
-    };
-
-    const sanitizeFilename = (title: string): string => {
-      const base = removeAccents(title);
-      return base
-        .replace(/[\\\/:\*\?"<>|]/g, "")
-        .trim();
-    };
-
-    const baseFilename = sanitizeFilename(rawTitle) || "Ebook";
-    const storageKey = `ebook_export_version_${baseFilename.toLowerCase()}`;
-    const currentVersionStr = localStorage.getItem(storageKey);
-    const version = currentVersionStr ? parseInt(currentVersionStr, 10) : 1;
-
     return {
-      fileName: `${baseFilename}_v${version}.pdf`,
-      markAsDownloaded: () => {
-        localStorage.setItem(storageKey, String(version + 1));
-      },
+      fileName: buildHybridPdfFileName(settings.title || "ebook"),
     };
   };
+
+  const projectedTotalPages = useMemo(() => {
+    let total = 0;
+    if (settings.coverImageUrl) total += 1;
+    if (settings.title || settings.professionalName) total += 1;
+    if (settings.educationalWarning) total += 1;
+    if (settings.generateToc !== false) total += 1;
+    total += contentPages.length;
+    if (settings.ctaText || settings.schedulingUrl || settings.whatsapp || settings.website) total += 1;
+    if (settings.brand || settings.professionalName || settings.website || settings.whatsapp || settings.email) total += 1;
+    return total;
+  }, [settings, contentPages.length]);
+
+  const hybridMetrics = useMemo(
+    () => getHybridPrintMetrics(projectedTotalPages, settings.pageFormat),
+    [projectedTotalPages, settings.pageFormat],
+  );
+
+  const hybridChecklists = useMemo(
+    () =>
+      buildHybridChecklists({
+        settings,
+        parsedHtml,
+        totalPages: projectedTotalPages,
+        hasCoverImage: !!settings.coverImageUrl,
+        hasQrCode: !!ctaQrCodeDataUrl,
+      }),
+    [settings, parsedHtml, projectedTotalPages, ctaQrCodeDataUrl],
+  );
 
   const downloadBlobAsFile = (blob: Blob, fileName: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -704,6 +755,7 @@ export default function App() {
       import("html2canvas"),
       import("jspdf"),
     ]);
+    const format = getPageFormatSpec(settings.pageFormat);
 
     const renderRoot = container.cloneNode(true) as HTMLElement;
     Array.from(renderRoot.querySelectorAll(".page")).forEach((pageEl, index) => {
@@ -721,7 +773,7 @@ export default function App() {
     sandbox.style.position = "fixed";
     sandbox.style.left = "-200vw";
     sandbox.style.top = "0";
-    sandbox.style.width = "210mm";
+    sandbox.style.width = `${format.widthMm}mm`;
     sandbox.style.opacity = "1";
     sandbox.style.pointerEvents = "none";
     sandbox.style.background = backgroundColor;
@@ -743,7 +795,7 @@ export default function App() {
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
-        format: "a4",
+        format: [format.widthMm, format.heightMm],
         compress: true,
       });
 
@@ -764,11 +816,11 @@ export default function App() {
         });
 
         if (pageIndex > 0) {
-          pdf.addPage("a4", "portrait");
+          pdf.addPage([format.widthMm, format.heightMm], "portrait");
         }
 
         const imageData = canvas.toDataURL("image/png");
-        pdf.addImage(imageData, "PNG", 0, 0, 210, 297, undefined, "FAST");
+        pdf.addImage(imageData, "PNG", 0, 0, format.widthMm, format.heightMm, undefined, "FAST");
       }
 
       return pdf.output("blob");
@@ -1434,9 +1486,16 @@ export default function App() {
     }
 
     setIsExportingPdf(true);
-    showToast("Gerando PDF de alta fidelidade... Aguarde um momento.", "info");
+    showToast("Gerando PDF híbrido para leitura digital e impressão física...", "info");
 
     try {
+      const primaryCtaUrl = settings.schedulingUrl || settings.whatsapp || settings.website || "";
+      if (primaryCtaUrl && !ctaQrCodeDataUrl) {
+        const freshQrCode = await generateQrCodeDataUrl(primaryCtaUrl);
+        setCtaQrCodeDataUrl(freshQrCode);
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+
       // Calculate active layout values based on densityMode to feed static styles
       let bodyFontSize = '11.5pt';
       let bodyLineHeight = '1.5';
@@ -1464,6 +1523,8 @@ export default function App() {
       const bgColor = settings.backgroundColor || '#FAF8F4';
       const fontFamily = settings.fontFamily ? `${settings.fontFamily}, sans-serif` : 'Inter, sans-serif';
       const fontDisplay = settings.fontDisplay ? `${settings.fontDisplay}, sans-serif` : 'Poppins, sans-serif';
+      const format = getPageFormatSpec(settings.pageFormat);
+      const metrics = getHybridPrintMetrics(projectedTotalPages, settings.pageFormat);
 
       const cleanCss = getOklchFreeStyleString();
 
@@ -1490,25 +1551,45 @@ export default function App() {
           --ebook-h1-size: ${h1FontSize} !important;
           --ebook-h2-size: ${h2FontSize} !important;
           --ebook-para-margin: ${paraMargin} !important;
+          --page-width: ${format.widthMm}mm !important;
+          --page-height: ${format.heightMm}mm !important;
+          --page-padding-top: ${metrics.margins.topMm}mm !important;
+          --page-padding-bottom: ${metrics.margins.bottomMm}mm !important;
+          --page-padding-inner: ${metrics.margins.innerMm}mm !important;
+          --page-padding-outer: ${metrics.margins.outerMm}mm !important;
+          --page-safe-width: ${metrics.safeArea.widthMm}mm !important;
+          --page-safe-height: ${metrics.safeArea.heightMm}mm !important;
+          --qr-size-mm: ${metrics.qrSizeMm}mm !important;
+        }
+        .ebook-preview-container {
+          width: ${format.widthMm}mm !important;
+          max-width: ${format.widthMm}mm !important;
         }
         .page {
           display: block !important;
           position: relative !important;
-          width: 210mm !important;
-          height: 297mm !important;
-          max-height: 297mm !important;
+          width: ${format.widthMm}mm !important;
+          height: ${format.heightMm}mm !important;
+          max-height: ${format.heightMm}mm !important;
           box-sizing: border-box !important;
-          padding: 25mm 20mm !important;
+          padding-top: ${metrics.margins.topMm}mm !important;
+          padding-bottom: ${metrics.margins.bottomMm}mm !important;
+          padding-left: ${metrics.margins.innerMm}mm !important;
+          padding-right: ${metrics.margins.outerMm}mm !important;
           overflow: hidden !important;
           background-color: ${bgColor} !important;
           font-family: ${fontFamily} !important;
           line-height: ${bodyLineHeight} !important;
         }
+        .page.is-even {
+          padding-left: ${metrics.margins.outerMm}mm !important;
+          padding-right: ${metrics.margins.innerMm}mm !important;
+        }
         .ebook-content {
           display: block !important;
           width: 100% !important;
           height: auto !important;
-          max-height: 228mm !important;
+          max-height: ${metrics.safeArea.heightMm}mm !important;
           overflow: hidden !important;
           font-size: ${bodyFontSize} !important;
           line-height: ${bodyLineHeight} !important;
@@ -1517,15 +1598,18 @@ export default function App() {
           display: flex !important;
           flex-direction: column !important;
           justify-content: center !important;
-          height: 228mm !important;
+          height: ${metrics.safeArea.heightMm}mm !important;
         }
         .footer-print {
           position: absolute !important;
-          bottom: 25mm !important;
-          left: 20mm !important;
-          width: 170mm !important;
+          bottom: ${metrics.margins.bottomMm}mm !important;
+          left: ${metrics.margins.innerMm}mm !important;
+          width: ${metrics.safeArea.widthMm}mm !important;
           margin-top: 0 !important;
           box-sizing: border-box !important;
+        }
+        .page.is-even .footer-print {
+          left: ${metrics.margins.outerMm}mm !important;
         }
         .header-print {
           display: block !important;
@@ -1626,7 +1710,9 @@ export default function App() {
             html: htmlContent,
             css: finalCss,
             fontFamily: settings.fontFamily,
-            fontDisplay: settings.fontDisplay
+            fontDisplay: settings.fontDisplay,
+            pageWidthMm: format.widthMm,
+            pageHeightMm: format.heightMm,
           })
         });
 
@@ -1656,11 +1742,10 @@ export default function App() {
       }
 
       downloadBlobAsFile(pdfBlob, pdfDownload.fileName);
-      pdfDownload.markAsDownloaded();
       showToast(
         usedBrowserFallback
-          ? "PDF gerado localmente no navegador e enviado para download."
-          : "PDF gerado com sucesso para download!",
+          ? "PDF híbrido gerado localmente no navegador e enviado para download."
+          : "PDF híbrido gerado com sucesso para download.",
         "success"
       );
 
@@ -1782,8 +1867,8 @@ export default function App() {
               blocks.length === 0
                 ? "Adicione conteúdo antes de exportar"
                 : isExportingPdf
-                  ? "Exportando PDF..."
-                  : "Exportar para PDF"
+                  ? "Exportando PDF híbrido..."
+                  : "Exportar PDF híbrido"
             }
           >
             {isExportingPdf ? (
@@ -1794,7 +1879,7 @@ export default function App() {
             ) : (
               <>
                 <Download size={13} className="shrink-0" />
-                <span>Exportar PDF</span>
+                <span>Exportar PDF híbrido</span>
               </>
             )}
           </button>
@@ -2159,6 +2244,12 @@ export default function App() {
 
                 {isExportOptionsOpen && (
                   <div className="mt-6 animate-in slide-in-from-top-2 duration-200">
+                    <div className="mb-6 rounded-xl border border-[#C9D8D5] bg-white p-4 text-sm text-[#2F3437]">
+                      <p className="font-semibold text-[#245C5A]">Saída única: PDF híbrido</p>
+                      <p className="mt-1">
+                        O app exporta um único PDF preparado para e-book e também para impressão física, com formato real, margens seguras, CTA com URL visível e QR Code.
+                      </p>
+                    </div>
                     <div
                       className="flex flex-wrap items-end justify-start sm:justify-end gap-3 mb-6"
                       id="export-controls-container"
@@ -2212,6 +2303,23 @@ export default function App() {
                       </div>
                     </div>
 
+                <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-xl border border-[#C9D8D5] bg-white p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-gray-400 font-bold">Formato</p>
+                    <p className="mt-1 font-semibold text-[#245C5A]">{hybridChecklists.formatLabel}</p>
+                  </div>
+                  <div className="rounded-xl border border-[#C9D8D5] bg-white p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-gray-400 font-bold">Margem Interna</p>
+                    <p className="mt-1 font-semibold text-[#245C5A]">
+                      {(hybridMetrics.margins.innerMm / 10).toFixed(1).replace(".", ",")} cm
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#C9D8D5] bg-white p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-gray-400 font-bold">Acabamento sugerido</p>
+                    <p className="mt-1 font-semibold text-[#245C5A]">{hybridChecklists.bindingRecommendation}</p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[#2F3437]">
                   <div className="flex items-center gap-2">
                     <CheckCircle
@@ -2250,6 +2358,49 @@ export default function App() {
                   )}
                 </div>
 
+                <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-[#C9D8D5] bg-white p-5">
+                    <h4 className="text-sm font-display font-semibold text-[#245C5A] mb-4">Checklist Técnico</h4>
+                    <div className="space-y-3">
+                      {hybridChecklists.technical.map((item) => (
+                        <div key={item.label} className="flex items-start gap-3">
+                          <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${
+                            item.status === "approved"
+                              ? "bg-green-600"
+                              : item.status === "attention"
+                                ? "bg-yellow-500"
+                                : "bg-red-600"
+                          }`} />
+                          <div>
+                            <p className="text-sm font-semibold text-[#2F3437]">{item.label}</p>
+                            <p className="text-xs text-gray-500">{item.detail}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-[#C9D8D5] bg-white p-5">
+                    <h4 className="text-sm font-display font-semibold text-[#245C5A] mb-4">Checklist Editorial</h4>
+                    <div className="space-y-3">
+                      {hybridChecklists.editorial.map((item) => (
+                        <div key={item.label} className="flex items-start gap-3">
+                          <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${
+                            item.status === "approved"
+                              ? "bg-green-600"
+                              : item.status === "attention"
+                                ? "bg-yellow-500"
+                                : "bg-red-600"
+                          }`} />
+                          <div>
+                            <p className="text-sm font-semibold text-[#2F3437]">{item.label}</p>
+                            <p className="text-xs text-gray-500">{item.detail}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Email Delivery Options */}
                 <div className="mt-6 bg-[#FAF8F4]/80 border border-gray-200 rounded-xl p-5 shadow-xs">
                   <div className="flex items-center justify-between gap-4 mb-3 border-b border-gray-100 pb-2 flex-wrap">
@@ -2269,7 +2420,7 @@ export default function App() {
                     <div className="space-y-3 animate-in fade-in duration-200">
                       <p className="text-xs text-gray-700 leading-relaxed">
                         Detectamos que você está logado como <strong className="text-[#245C5A]">{user.email}</strong>. 
-                        Durante a geração de EPUB, enviaremos o anexo diretamente para sua caixa de entrada. A exportação em PDF é gerada diretamente pelo nosso motor vetorial no servidor, garantindo texto selecionável e de alta qualidade.
+                        Durante a geração de EPUB, enviaremos o anexo diretamente para sua caixa de entrada. O PDF híbrido é gerado diretamente pelo motor vetorial do servidor, preservando texto selecionável e maior fidelidade para impressão.
                       </p>
                       <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
                         <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-800 hover:text-blue-700 select-none">
@@ -2337,18 +2488,18 @@ export default function App() {
                       blocks.length === 0
                         ? "Adicione conteúdo antes de exportar"
                         : isExportingPdf
-                          ? "Exportando PDF..."
-                          : "Exportar para PDF"
+                          ? "Exportando PDF híbrido..."
+                          : "Exportar PDF híbrido"
                     }
                   >
                     {isExportingPdf ? (
                       <>
                         <RefreshCw size={20} className="mr-2 animate-spin" />
-                        {isExportingPdf ? "Gerando PDF..." : "Exportar para PDF"}
+                        {isExportingPdf ? "Gerando PDF híbrido..." : "Exportar PDF híbrido"}
                       </>
                     ) : (
                       <>
-                        <Download size={20} className="mr-2" /> Exportar para PDF
+                        <Download size={20} className="mr-2" /> Exportar PDF híbrido
                       </>
                     )}
                   </button>
@@ -2375,7 +2526,7 @@ export default function App() {
 
             <div className="bg-white border border-gray-200 p-4 rounded-xl text-center">
                 <p className="text-sm text-gray-500">
-                  Preview visual simulando A4.
+                  Preview visual simulando {hybridChecklists.formatLabel}.
                 </p>
               </div>
             </div>
@@ -2398,7 +2549,7 @@ export default function App() {
       <div
         className={`${activeTab === "preview" ? "block" : "hidden print:block"}`}
       >
-        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} onContentUpdate={handleContentUpdateFromPreview} />
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} onContentUpdate={handleContentUpdateFromPreview} ctaQrCodeDataUrl={ctaQrCodeDataUrl} />
       </div>
 
       {/* Container invisível exclusivo para renderização e exportação direta de PDF */}
@@ -2409,7 +2560,7 @@ export default function App() {
           position: "fixed",
           top: "0px",
           left: "0px",
-          width: "210mm",
+          width: `${getPageFormatSpec(settings.pageFormat).widthMm}mm`,
           height: "auto",
           overflow: "visible",
           opacity: 0.001,
@@ -2418,7 +2569,7 @@ export default function App() {
         }}
         aria-hidden="true"
       >
-        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} isPrintMode={true} />
+        <EbookPreview settings={settings} contentPages={contentPages} buildVersion={buildVersionStr} isPrintMode={true} ctaQrCodeDataUrl={ctaQrCodeDataUrl} />
       </div>
 
       {/* GLOBAL NOTIFICATION TOAST */}

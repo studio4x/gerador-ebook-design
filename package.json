@@ -33,6 +33,7 @@
     "nodemailer": "^9.0.1",
     "puppeteer": "^25.2.1",
     "puppeteer-core": "^25.2.1",
+    "qrcode": "^1.5.4",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",

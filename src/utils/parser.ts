@@ -457,6 +457,13 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
           case 'aviso':
             result.educationalWarning = value;
             break;
+          case 'editionyear':
+          case 'ano':
+            result.editionYear = value;
+            break;
+          case 'isbn':
+            result.isbn = value;
+            break;
           case 'ctatext':
           case 'cta':
             result.ctaText = value;
@@ -467,6 +474,13 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
           case 'materialtype':
           case 'tipo':
             result.materialType = value;
+            break;
+          case 'pageformat':
+          case 'formato':
+            if (/16\s*x\s*23/i.test(value)) result.pageFormat = '16x23';
+            else if (/11[,.]?5\s*x\s*18/i.test(value)) result.pageFormat = '11_5x18';
+            else if (/20\s*x\s*20/i.test(value)) result.pageFormat = '20x20';
+            else result.pageFormat = 'a4';
             break;
           case 'targetaudience':
           case 'publico':
@@ -576,6 +590,16 @@ export function extractMetadataFromContent(blocks: ContentBlock[]): Partial<Proj
   if (!result.schedulingUrl) {
     const scheduleVal = findValueInLines(/(?:Agendamento):\s*(https?:\/\/[^\s]+)/i);
     if (scheduleVal) result.schedulingUrl = scheduleVal;
+  }
+
+  if (!result.editionYear) {
+    const editionYearVal = findValueInLines(/(?:Ano da Edição|Ano):\s*(\d{4})/i);
+    if (editionYearVal) result.editionYear = editionYearVal;
+  }
+
+  if (!result.isbn) {
+    const isbnVal = findValueInLines(/(?:ISBN):\s*([0-9Xx\- ]{10,20})/i);
+    if (isbnVal) result.isbn = isbnVal;
   }
 
   // Disclaimer warning body

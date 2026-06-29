@@ -1,8 +1,10 @@
 export type DensityMode = 'compact' | 'comfortable' | 'premium';
+export type PageFormatId = 'a4' | '16x23' | '11_5x18' | '20x20';
 
 export type ProjectSettings = {
   shortTitle: string;
   densityMode: DensityMode;
+  pageFormat?: PageFormatId;
   title: string;
   subtitle: string;
   supportPhrase: string;
@@ -21,6 +23,8 @@ export type ProjectSettings = {
   whatsapp: string;
   schedulingUrl: string;
   educationalWarning: string;
+  editionYear?: string;
+  isbn?: string;
   generateToc?: boolean;
   
   // Pure visual properties parsed from the layout configs
@@ -76,6 +80,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   title: "",
   shortTitle: "",
   densityMode: "comfortable",
+  pageFormat: "a4",
   subtitle: "",
   supportPhrase: "",
   professionalName: "",
@@ -93,6 +98,8 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   whatsapp: "",
   schedulingUrl: "",
   educationalWarning: "",
+  editionYear: new Date().getFullYear().toString(),
+  isbn: "",
   coverBadgeText: "E-book educativo"
 };
 

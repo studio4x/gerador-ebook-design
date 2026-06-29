@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ProjectSettings, DEFAULT_SETTINGS } from '../types';
 import TurndownService from 'turndown';
 import { chunkIntoPages } from '../utils/paginator';
+import { getHybridPrintMetrics, getPageFormatSpec } from '../utils/printProfile';
 import { 
   BookOpen, 
   Eye, 
@@ -39,6 +40,7 @@ interface EbookPreviewProps {
   buildVersion?: string;
   isPrintMode?: boolean;
   onContentUpdate?: (newMarkdown: string) => void;
+  ctaQrCodeDataUrl?: string;
 }
 
 interface TocEntry {
@@ -88,7 +90,7 @@ function hasMeaningfulPageContent(pageHtml: string): boolean {
   });
 }
 
-export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode = false, onContentUpdate }: EbookPreviewProps) {
+export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode = false, onContentUpdate, ctaQrCodeDataUrl = "" }: EbookPreviewProps) {
   const [viewMode, setViewMode] = useState<'scroll' | 'book' | 'grid'>(isPrintMode ? 'scroll' : 'scroll');
   const [zoom, setZoom] = useState<number>(isPrintMode ? 100 : 55);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isPrintMode ? false : true);
@@ -779,8 +781,24 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
   const hasCapaImagem = !!safeSettings.coverImageUrl;
   const hasCapa = !!(safeSettings.title || safeSettings.professionalName);
   const hasRosto = false; // Folha de Rosto desativada por padrão a pedido do usuário
+  const hasCreditos = !!(safeSettings.title || safeSettings.professionalName || safeSettings.brand || safeSettings.editionYear || safeSettings.isbn);
   const hasAviso = !!safeSettings.educationalWarning;
   const hasSumario = safeSettings.generateToc;
+  const hasCta = !!(safeSettings.ctaText || safeSettings.schedulingUrl || safeSettings.whatsapp || safeSettings.website);
+  const hasFinalPage = !!(safeSettings.brand || safeSettings.professionalName || safeSettings.website || safeSettings.whatsapp || safeSettings.email || safeSettings.contactAddress);
+  const primaryCtaUrl = safeSettings.schedulingUrl || safeSettings.whatsapp || safeSettings.website || '';
+  const pageFormat = getPageFormatSpec(safeSettings.pageFormat);
+  const estimatedPageCount =
+    activeContentPages.length +
+    (hasCapaImagem ? 1 : 0) +
+    (hasCapa ? 1 : 0) +
+    (hasRosto ? 1 : 0) +
+    (hasCreditos ? 1 : 0) +
+    (hasAviso ? 1 : 0) +
+    (hasSumario ? 1 : 0) +
+    (hasCta ? 1 : 0) +
+    (hasFinalPage ? 1 : 0);
+  const hybridMetrics = getHybridPrintMetrics(estimatedPageCount, safeSettings.pageFormat);
 
   // Extract raw chapters / principal headings from parsed HTML of the content pages, memoized for performance
   const rawTocEntries = useMemo(() => {
@@ -1156,9 +1174,6 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     return titles;
   }, [activeContentPages]);
 
-  const ctaPageNum = contentStartPageNum + activeContentPages.length;
-  const finalPageNum = ctaPageNum + (settings.ctaText ? 1 : 0);
-
   // Compute specific CSS layout variables depending on Density mode for precise reading sizes
   let bodyFontSize = '11.5pt';
   let bodyLineHeight = '1.5';
@@ -1197,6 +1212,15 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     '--ebook-h1-size': h1FontSize,
     '--ebook-h2-size': h2FontSize,
     '--ebook-para-margin': paraMargin,
+    '--page-width': `${pageFormat.widthMm}mm`,
+    '--page-height': `${pageFormat.heightMm}mm`,
+    '--page-padding-top': `${hybridMetrics.margins.topMm}mm`,
+    '--page-padding-bottom': `${hybridMetrics.margins.bottomMm}mm`,
+    '--page-padding-inner': `${hybridMetrics.margins.innerMm}mm`,
+    '--page-padding-outer': `${hybridMetrics.margins.outerMm}mm`,
+    '--page-safe-height': `${hybridMetrics.safeArea.heightMm}mm`,
+    '--page-safe-width': `${hybridMetrics.safeArea.widthMm}mm`,
+    '--qr-size-mm': `${hybridMetrics.qrSizeMm}mm`,
     border: settings.pageBorder ? '1px solid #C9D8D5' : undefined,
   } as React.CSSProperties;
 
@@ -1236,10 +1260,12 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     }
     const footerAlign = settings.footerStyle || 'left';
     const pageNumAlign = settings.pageNumberStyle || 'right';
+    const isEvenPage = pageNum % 2 === 0;
+    const useOutsidePageNumber = pageNumAlign === 'right';
 
     let justifyClass = 'justify-between';
-    let textOrder = 'order-1';
-    let numOrder = 'order-2';
+    let textOrder = isEvenPage && useOutsidePageNumber ? 'order-2' : 'order-1';
+    let numOrder = isEvenPage && useOutsidePageNumber ? 'order-1' : 'order-2';
     
     if (footerAlign === 'right' && pageNumAlign === 'left') {
       textOrder = 'order-2';
@@ -1265,7 +1291,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
 
   // Compile exact listing of projected pages with label identifiers
   const pagesList = useMemo(() => {
-    const list: { id: string; label: string; type: 'capa_imagem' | 'capa' | 'rosto' | 'aviso' | 'sumario' | 'conteudo' | 'cta' | 'final'; pageNum: number; sumarioPageIndex?: number }[] = [];
+    const list: { id: string; label: string; type: 'capa_imagem' | 'capa' | 'rosto' | 'creditos' | 'aviso' | 'sumario' | 'conteudo' | 'cta' | 'final'; pageNum: number; sumarioPageIndex?: number }[] = [];
     let pNum = 1;
     
     if (hasCapaImagem) {
@@ -1276,6 +1302,9 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
     }
     if (hasRosto) {
       list.push({ id: 'rosto-page', label: 'Folha de Rosto', type: 'rosto', pageNum: pNum++ });
+    }
+    if (hasCreditos) {
+      list.push({ id: 'creditos-page', label: 'Créditos & Ficha', type: 'creditos', pageNum: pNum++ });
     }
     if (hasAviso) {
       list.push({ id: 'aviso-page', label: 'Aviso Importante', type: 'aviso', pageNum: pNum++ });
@@ -1300,14 +1329,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       const fallbackCh = `Capítulo ${idx + 1}`;
       list.push({ id: `content-page-${idx}`, label: rawCh || fallbackCh, type: 'conteudo', pageNum: pNum++ });
     });
-    // if (safeSettings.ctaText) {
-    //   list.push({ id: 'cta-page', label: 'Convite / CTA', type: 'cta', pageNum: pNum++ });
-    // }
-    // if (safeSettings.brand || safeSettings.professionalName || safeSettings.website || safeSettings.whatsapp || safeSettings.email) {
-    //   list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
-    // }
+    if (hasCta) {
+      list.push({ id: 'cta-page', label: 'Convite & CTA', type: 'cta', pageNum: pNum++ });
+    }
+    if (hasFinalPage) {
+      list.push({ id: 'final-page', label: 'Contatos & Institucional', type: 'final', pageNum: pNum++ });
+    }
     return list;
-  }, [hasCapaImagem, hasCapa, hasRosto, hasAviso, hasSumario, numSumarioPages, sumarioPageStartNum, contentStartPageNum, activeContentPages, pageChapterTitles, safeSettings]);
+  }, [hasCapaImagem, hasCapa, hasRosto, hasCreditos, hasAviso, hasSumario, hasCta, hasFinalPage, numSumarioPages, sumarioPageStartNum, contentStartPageNum, activeContentPages, pageChapterTitles, safeSettings]);
 
   // Perform full search text matching calculation
   const checkPageMatch = (pageId: string) => {
@@ -1324,6 +1353,12 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
       return (safeSettings.title || '').toLowerCase().includes(query) ||
              (safeSettings.subtitle || '').toLowerCase().includes(query) ||
              (safeSettings.supportPhrase || '').toLowerCase().includes(query);
+    }
+    if (pageId === 'creditos-page') {
+      return (safeSettings.title || '').toLowerCase().includes(query) ||
+             (safeSettings.professionalName || '').toLowerCase().includes(query) ||
+             (safeSettings.brand || '').toLowerCase().includes(query) ||
+             (safeSettings.isbn || '').toLowerCase().includes(query);
     }
     if (pageId === 'aviso-page') {
       return (safeSettings.educationalWarning || '').toLowerCase().includes(query);
@@ -1399,8 +1434,8 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
           .ebook-preview-container {
             padding: 0 !important;
             margin: 0 !important;
-            width: 210mm !important;
-            max-width: 210mm !important;
+            width: var(--page-width) !important;
+            max-width: var(--page-width) !important;
             height: auto !important;
             min-height: 0 !important;
           }
@@ -1859,14 +1894,14 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        className="w-full h-full origin-top"
                        style={{
                          transform: viewMode === 'grid' ? 'scale(0.36)' : undefined,
-                         width: viewMode === 'grid' ? '210mm' : undefined,
-                         height: viewMode === 'grid' ? '297mm' : undefined,
+                         width: viewMode === 'grid' ? `${pageFormat.widthMm}mm` : undefined,
+                         height: viewMode === 'grid' ? `${pageFormat.heightMm}mm` : undefined,
                        }}
                      >
                         {p.type === 'capa_imagem' && (
                           <section 
                             id="capa-imagem-page" 
-                            className="page flex flex-col justify-center relative select-none !p-0"
+                            className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-center relative select-none !p-0`}
                           >
                             {safeSettings.coverImageUrl && (
                               <div className="w-full h-full absolute inset-0">
@@ -1884,7 +1919,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        {p.type === 'capa' && (
                          <section 
                            id="capa-page" 
-                           className="page flex flex-col justify-center relative select-none"
+                           className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-center relative select-none`}
                          >
                            <>
                              <div className="mb-4 inline-block">
@@ -1926,7 +1961,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        )}
 
                        {p.type === 'rosto' && (
-                         <section id="rosto-page" className="page flex flex-col items-center justify-center text-center select-none">
+                         <section id="rosto-page" className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col items-center justify-center text-center select-none`}>
                             <h1 className="text-4xl font-display text-[#245C5A] font-bold mb-4">{safeSettings.title}</h1>
                             <h2 className="text-xl text-[#6F8F9A] mb-8">{safeSettings.subtitle}</h2>
                             <p className="max-w-md mx-auto italic text-[#2F3437] mb-12">{safeSettings.supportPhrase}</p>
@@ -1939,8 +1974,29 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                          </section>
                        )}
 
+                       {p.type === 'creditos' && (
+                         <section id="creditos-page" className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-between scroll-mt-6`}>
+                            {renderHeader(false)}
+                            <div className="flex-grow flex flex-col justify-center">
+                              <span className="text-xs uppercase tracking-[0.24em] text-[#6F8F9A] font-bold">Ficha Editorial</span>
+                              <h1 className="text-3xl font-display text-[#245C5A] font-bold mt-3 mb-4">{safeSettings.title}</h1>
+                              {safeSettings.subtitle && <p className="text-lg text-[#6F8F9A] mb-8">{safeSettings.subtitle}</p>}
+
+                              <div className="space-y-3 text-[#2F3437]">
+                                {safeSettings.professionalName && <p><strong>Autoria:</strong> {safeSettings.professionalName}</p>}
+                                {safeSettings.professionalTitle && <p><strong>Título profissional:</strong> {safeSettings.professionalTitle}</p>}
+                                {safeSettings.professionalReg && <p><strong>Registro:</strong> {safeSettings.professionalReg}</p>}
+                                {safeSettings.brand && <p><strong>Instituição:</strong> {safeSettings.brand}</p>}
+                                {safeSettings.editionYear && <p><strong>Ano da edição:</strong> {safeSettings.editionYear}</p>}
+                                {safeSettings.isbn && <p><strong>ISBN:</strong> {safeSettings.isbn}</p>}
+                              </div>
+                            </div>
+                            {renderFooter(p.pageNum, false)}
+                         </section>
+                       )}
+
                        {p.type === 'aviso' && (
-                         <section id="aviso-page" className="page flex flex-col scroll-mt-6">
+                         <section id="aviso-page" className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col scroll-mt-6`}>
                             {renderHeader(false)}
                             
                             <div className="flex-grow flex items-center justify-center">
@@ -1960,7 +2016,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                          const sIdx = p.sumarioPageIndex ?? 0;
                          const paginatedEntries = tocPagesMapped[sIdx] || [];
                          return (
-                         <section id={p.id} className="page flex flex-col justify-between scroll-mt-6 relative">
+                         <section id={p.id} className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-between scroll-mt-6 relative`}>
                             <div className="absolute top-0 right-0 w-48 h-48 bg-[#F4EFE7] rounded-bl-full opacity-30 -z-10"></div>
                             
                             {renderHeader(false, undefined, 'toc')}
@@ -2032,7 +2088,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                          const contentIdx = pagesList.slice(0, pageListIndex).filter(x => x.type === 'conteudo').length;
                          const pageHtml = activeContentPages[contentIdx] || '';
                          return (
-                           <section id={p.id} className="page flex flex-col justify-between scroll-mt-6">
+                           <section id={p.id} className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-between scroll-mt-6`}>
                               {renderHeader(false, contentIdx)}
                               <div 
                                 ref={(el) => { editorRefs.current[contentIdx] = el; }}
@@ -2051,7 +2107,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        })()}
 
                        {p.type === 'cta' && (
-                         <section id="cta-page" className="page flex flex-col justify-between bg-[#F4EFE7] scroll-mt-6">
+                         <section id="cta-page" className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-between bg-[#F4EFE7] scroll-mt-6`}>
                             {renderHeader(false)}
                             <div className="max-w-2xl mx-auto my-auto flex-grow flex flex-col justify-center">
                                 <h2 className="text-3xl font-display font-bold text-[#245C5A] mb-6">Um convite</h2>
@@ -2061,16 +2117,33 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                                     ))}
                                 </div>
                                 
-                                {(safeSettings.whatsapp || safeSettings.schedulingUrl) && (
-                                    <a href={safeSettings.schedulingUrl || safeSettings.whatsapp} target="_blank" rel="noreferrer" className="inline-block mt-8 bg-[#245C5A] text-white px-8 py-4 rounded-lg font-bold hover:bg-[#1b4342] transition-colors no-print w-fit">
+                                {primaryCtaUrl && (
+                                    <a href={primaryCtaUrl} target="_blank" rel="noreferrer" className="inline-block mt-8 bg-[#245C5A] text-white px-8 py-4 rounded-lg font-bold hover:bg-[#1b4342] transition-colors w-fit">
                                         {safeSettings.ctaButtonText || 'Saiba Mais'}
                                     </a>
                                 )}
-                                {(safeSettings.schedulingUrl || safeSettings.whatsapp) && (
-                                  <p className="mt-4 text-sm text-[#6F8F9A] hidden print:block">
-                                      Para agendamentos e mais informações, acesse: <br/>
-                                      <strong>{safeSettings.schedulingUrl || safeSettings.whatsapp}</strong>
-                                  </p>
+                                {primaryCtaUrl && (
+                                  <div className="mt-6 rounded-2xl border border-[#C9D8D5] bg-white/90 p-4">
+                                    <p className="text-xs uppercase tracking-[0.22em] text-[#6F8F9A] font-bold">Acesso no papel e na tela</p>
+                                    <p className="mt-2 text-sm text-[#2F3437]">
+                                      Salve este link ou use o QR Code ao lado se estiver com a versão impressa.
+                                    </p>
+                                    <div className="mt-4 flex flex-col sm:flex-row items-start gap-4">
+                                      {ctaQrCodeDataUrl && (
+                                        <div className="rounded-xl border border-[#C9D8D5] bg-[#FAF8F4] p-3">
+                                          <img
+                                            src={ctaQrCodeDataUrl}
+                                            alt="QR Code do CTA"
+                                            className="w-[var(--qr-size-mm)] h-[var(--qr-size-mm)] min-w-[var(--qr-size-mm)] min-h-[var(--qr-size-mm)]"
+                                          />
+                                        </div>
+                                      )}
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-[#245C5A]">URL visível</p>
+                                        <p className="mt-1 text-sm text-[#2F3437] break-all">{primaryCtaUrl}</p>
+                                      </div>
+                                    </div>
+                                  </div>
                                 )}
                             </div>
 
@@ -2079,7 +2152,7 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
                        )}
 
                        {p.type === 'final' && (
-                         <section id="final-page" className="page flex flex-col justify-between scroll-mt-6">
+                         <section id="final-page" className={`page ${p.pageNum % 2 === 0 ? 'is-even' : 'is-odd'} flex flex-col justify-between scroll-mt-6`}>
                              {renderHeader(false)}
                              <div className="mt-10 mb-auto">
                                  <h1 className="text-2xl font-display font-bold text-[#245C5A] mb-2">{safeSettings.brand}</h1>
