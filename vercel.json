@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/export-pdf.ts": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "excludeFiles": "{.cache/**,node_modules/puppeteer/.local-chromium/**}"
     }
   }
 }

@@ -60,6 +60,7 @@ Consulte o modelo em [.env.example](.env.example).
 - Em deploy no Vercel, a rota `api/export-pdf` também existe como função serverless própria
 - Em ambientes onde `/api/export-pdf` não estiver disponível, o cliente possui fallback de geração local no navegador
 - Se houver `404` em `/api/cloud/projects`, o ambiente provavelmente está sem as rotas de sincronização em nuvem publicadas no mesmo host
+- O build do Vercel não instala o Chrome local do Puppeteer; a função serverless usa `@sparticuz/chromium` para evitar estouro do limite de upload
 
 ## Publicação
 
