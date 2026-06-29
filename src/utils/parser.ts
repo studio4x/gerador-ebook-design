@@ -194,6 +194,8 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
       bq.parentNode?.replaceChild(div, bq);
   });
 
+  convertChecklistSections(doc);
+
   // Ensure manual page breaks are top-level children of doc.body so the paginator detects them and layout is safe
   const manualBreaks = Array.from(doc.querySelectorAll('.manual-page-break'));
   manualBreaks.forEach((br) => {
@@ -372,6 +374,102 @@ function removeNextUntilHeading(startElement: Element) {
         parent.removeChild(current);
         current = next;
     }
+}
+
+function convertChecklistSections(doc: Document) {
+  const bodyChildren = Array.from(doc.body.children);
+  const checklistHeadingPattern = /(checklist|exerc[ií]cio|atividade|marque|assinale|sinalize|preencha|o que mais pesa|itens para marcar)/i;
+  const checklistIntroPattern = /(marque|assinale|sinalize|preencha|selecione).*(pontos|itens|opções|opcoes|campos|alternativas)/i;
+
+  const isHeading = (node: Element) => /^h[1-6]$/i.test(node.tagName);
+  const isShortChecklistCandidate = (node: Element) => {
+    if (node.tagName.toLowerCase() !== "p") return false;
+    if (node.querySelector("a, img, strong, em, table")) return false;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text) return false;
+    if (text.length > 90) return false;
+    if (/[.:;!?]$/.test(text)) return false;
+
+    const wordCount = text.split(" ").filter(Boolean).length;
+    return wordCount <= 8;
+  };
+
+  const createChecklistNode = (text: string) => {
+    const wrapper = doc.createElement("div");
+    wrapper.className = "checklist-item";
+
+    const box = doc.createElement("div");
+    box.className = "checklist-box";
+
+    const label = doc.createElement("div");
+    label.className = "checklist-text";
+    label.textContent = text;
+
+    wrapper.appendChild(box);
+    wrapper.appendChild(label);
+    return wrapper;
+  };
+
+  bodyChildren.forEach((node) => {
+    if (!isHeading(node)) return;
+
+    const headingText = (node.textContent || "").trim();
+    let cursor = node.nextElementSibling;
+    let introNode: Element | null = null;
+    let shouldTreatAsChecklist = checklistHeadingPattern.test(headingText);
+
+    if (cursor && cursor.tagName.toLowerCase() === "p") {
+      const introText = (cursor.textContent || "").replace(/\s+/g, " ").trim();
+      if (checklistIntroPattern.test(introText)) {
+        introNode = cursor;
+        shouldTreatAsChecklist = true;
+        cursor = cursor.nextElementSibling;
+      }
+    }
+
+    if (!shouldTreatAsChecklist) return;
+
+    const candidateNodes: Element[] = [];
+    while (cursor && !isHeading(cursor)) {
+      if (cursor.classList.contains("manual-page-break")) break;
+
+      if (cursor.tagName.toLowerCase() === "ul" || cursor.tagName.toLowerCase() === "ol") {
+        const listItems = Array.from(cursor.querySelectorAll(":scope > li"));
+        if (listItems.length >= 2) {
+          listItems.forEach((item) => {
+            const text = (item.textContent || "").replace(/\s+/g, " ").trim();
+            if (text) {
+              const checklistNode = createChecklistNode(text);
+              cursor?.parentNode?.insertBefore(checklistNode, cursor);
+            }
+          });
+          const listToRemove = cursor;
+          cursor = cursor.nextElementSibling;
+          listToRemove.remove();
+          continue;
+        }
+      }
+
+      if (!isShortChecklistCandidate(cursor)) {
+        break;
+      }
+
+      candidateNodes.push(cursor);
+      cursor = cursor.nextElementSibling;
+    }
+
+    if (candidateNodes.length < 2) return;
+
+    candidateNodes.forEach((paragraphNode) => {
+      const text = (paragraphNode.textContent || "").replace(/\s+/g, " ").trim();
+      const checklistNode = createChecklistNode(text);
+      paragraphNode.parentNode?.replaceChild(checklistNode, paragraphNode);
+    });
+
+    if (introNode) {
+      introNode.classList.add("checklist-intro");
+    }
+  });
 }
 
 /**
