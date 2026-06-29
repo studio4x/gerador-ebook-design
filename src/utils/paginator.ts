@@ -380,3 +380,59 @@ export function chunkIntoPages(html: string, mode: 'compact' | 'comfortable' | '
   return pages;
 }
 
+export function splitHtmlByManualPageBreaks(html: string): string[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const nodes = Array.from(doc.body.children);
+  const pages: string[] = [];
+  let currentPageNodes: Element[] = [];
+
+  const isManualBreakNode = (node: Element) =>
+    node.classList.contains('manual-page-break') ||
+    node.classList.contains('page-break') ||
+    node.getAttribute('data-page-break') === 'true';
+
+  const hasMeaningfulContent = (pageNodes: Element[]) =>
+    pageNodes.some((node) => {
+      if (isManualBreakNode(node)) return false;
+      if (node.classList.contains('chapter-opener')) return true;
+      if (
+        node.classList.contains('checklist-item') ||
+        node.classList.contains('fill-line') ||
+        node.classList.contains('box-cuidado') ||
+        node.classList.contains('box-informativo') ||
+        node.classList.contains('box-reflexao') ||
+        node.classList.contains('frase-central')
+      ) {
+        return true;
+      }
+      if (
+        node.matches('img, svg, canvas, table, ul, ol, blockquote') ||
+        node.querySelector('img, svg, canvas, table, ul, ol, blockquote')
+      ) {
+        return true;
+      }
+      return (node.textContent || '').replace(/\u00a0/g, ' ').trim().length > 0;
+    });
+
+  const flushPage = () => {
+    if (hasMeaningfulContent(currentPageNodes)) {
+      pages.push(currentPageNodes.map((node) => node.outerHTML).join('\n'));
+    }
+    currentPageNodes = [];
+  };
+
+  nodes.forEach((node) => {
+    if (isManualBreakNode(node)) {
+      flushPage();
+      return;
+    }
+
+    currentPageNodes.push(node);
+  });
+
+  flushPage();
+
+  return pages;
+}
+

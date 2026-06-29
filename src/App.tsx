@@ -9,7 +9,7 @@ import {
   LocalProject,
 } from "./types";
 import { parseEbookContent, extractMetadataFromContent } from "./utils/parser";
-import { chunkIntoPages } from "./utils/paginator";
+import { chunkIntoPages, splitHtmlByManualPageBreaks } from "./utils/paginator";
 import { EbookPreview } from "./components/EbookPreview";
 import { VisualSettingsPanel } from "./components/VisualSettingsPanel";
 import { parseHandoffMarkdown, LayoutRevision } from "./utils/handoffParser";
@@ -64,6 +64,7 @@ function safeUUID(): string {
 }
 
 export default function App() {
+  const visualPaginationLockPattern = /<!--\s*visual-pagination-lock\s*-->/i;
   const initialSettings: ProjectSettings = {
     title: "Nome do Seu E-book",
     shortTitle: "Conexão Seres",
@@ -680,7 +681,7 @@ export default function App() {
   }, [isExportingPdf]);
 
   // Build version is statically defined corresponding to the workspace/app structure deployment
-  const buildVersionStr = "v1.4.162";
+  const buildVersionStr = "v1.4.163";
 
   const getPdfDownloadInfo = (): PdfDownloadInfo => {
     return {
@@ -894,7 +895,14 @@ export default function App() {
         if (blocks.length > 0) {
           const html = await parseEbookContent(blocks);
           setParsedHtml(html);
-          const pages = chunkIntoPages(html, settings.densityMode);
+          const isVisualEditsOnly =
+            blocks.length === 1 && blocks[0].filename === "Edições Visuais.md";
+          const hasVisualPaginationLock =
+            isVisualEditsOnly && visualPaginationLockPattern.test(blocks[0].content || "");
+
+          const pages = hasVisualPaginationLock
+            ? splitHtmlByManualPageBreaks(html)
+            : chunkIntoPages(html, settings.densityMode);
           setContentPages(pages);
         } else {
           setParsedHtml("");
@@ -1271,7 +1279,9 @@ export default function App() {
 
     const frontmatter = buildFrontmatterFromSettings(settings);
     const markdownBody = newMarkdown.replace(/^---\r?\n[\s\S]*?\r?\n---\s*/m, "");
-    const markdownWithFrontmatter = `${frontmatter}${markdownBody.trimStart()}`;
+    const visualPaginationLock = "<!-- visual-pagination-lock -->";
+    const sanitizedBody = markdownBody.replace(visualPaginationLockPattern, "").trimStart();
+    const markdownWithFrontmatter = `${frontmatter}${visualPaginationLock}\n\n${sanitizedBody}`;
 
     setBlocks((prev) => {
       let mergedBlock = prev.length === 1 && prev[0].filename === "Edições Visuais.md" ? prev[0] : null;

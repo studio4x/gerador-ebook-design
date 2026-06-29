@@ -12,6 +12,7 @@ export async function parseEbookContent(blocks: ContentBlock[]): Promise<string>
     let content = b.content;
     // Strip yaml frontmatter strictly at the beginning of the block
     content = content.replace(/^---\r?\n[\s\S]*?\r?\n---/g, '');
+    content = content.replace(/<!--\s*visual-pagination-lock\s*-->/gi, '');
     return content;
   });
 
