@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/export-pdf.ts": {
+      "maxDuration": 60
+    }
+  }
+}

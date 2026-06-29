@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@sparticuz/chromium": "^149.0.0",
+    "@supabase/supabase-js": "^2.57.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^5.0.4",
@@ -30,7 +32,7 @@
     "motion": "^12.23.24",
     "nodemailer": "^9.0.1",
     "puppeteer": "^25.2.1",
-    "@supabase/supabase-js": "^2.57.1",
+    "puppeteer-core": "^25.2.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",

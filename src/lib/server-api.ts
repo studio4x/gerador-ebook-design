@@ -11,14 +11,6 @@ const configuredServerApiBaseUrl = (
   import.meta.env.VITE_SERVER_API_BASE_URL as string | undefined
 )?.trim().replace(/\/+$/, "");
 
-function shouldAssumeNoServerApi() {
-  if (configuredServerApiBaseUrl) return false;
-  if (typeof window === "undefined") return false;
-
-  const hostname = window.location.hostname.toLowerCase();
-  return hostname.endsWith(".vercel.app");
-}
-
 function resolveServerApiInput(input: RequestInfo | URL): RequestInfo | URL {
   if (!configuredServerApiBaseUrl) {
     return input;
@@ -43,7 +35,7 @@ function resolveServerApiInput(input: RequestInfo | URL): RequestInfo | URL {
   return input;
 }
 
-let serverApiStatus: ServerApiStatus = shouldAssumeNoServerApi() ? "unavailable" : "unknown";
+let serverApiStatus: ServerApiStatus = "unknown";
 
 export function getServerApiStatus(): ServerApiStatus {
   return serverApiStatus;

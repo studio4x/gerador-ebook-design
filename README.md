@@ -57,9 +57,9 @@ Consulte o modelo em [.env.example](.env.example).
 ## Exportação de PDF
 
 - A rota principal de exportação é `POST /api/export-pdf`, atendida por `server.ts`
+- Em deploy no Vercel, a rota `api/export-pdf` também existe como função serverless própria
 - Em ambientes onde `/api/export-pdf` não estiver disponível, o cliente possui fallback de geração local no navegador
-- Se houver `404` em `/api/export-pdf` ou `/api/cloud/projects`, o ambiente provavelmente está servindo apenas o frontend sem o backend Express
-- Em deploys estáticos como `*.vercel.app`, sem `VITE_SERVER_API_BASE_URL`, o app assume backend indisponível e evita tentar `/api/*`
+- Se houver `404` em `/api/cloud/projects`, o ambiente provavelmente está sem as rotas de sincronização em nuvem publicadas no mesmo host
 
 ## Publicação
 
