@@ -385,16 +385,20 @@ function convertChecklistSections(doc: Document) {
   const checklistIntroPattern = /(marque|assinale|sinalize|preencha|selecione).*(pontos|itens|opções|opcoes|campos|alternativas)/i;
 
   const isHeading = (node: Element) => /^h[1-6]$/i.test(node.tagName);
-  const isShortChecklistCandidate = (node: Element) => {
+  const isShortChecklistCandidate = (node: Element, allowExpandedHeuristics = false) => {
     if (node.tagName.toLowerCase() !== "p") return false;
     if (node.querySelector("a, img, strong, em, table")) return false;
     const text = (node.textContent || "").replace(/\s+/g, " ").trim();
     if (!text) return false;
-    if (text.length > 90) return false;
-    if (/[.:;!?]$/.test(text)) return false;
+    if (!allowExpandedHeuristics) {
+      if (text.length > 90) return false;
+      if (/[.:;!?]$/.test(text)) return false;
+    } else {
+      if (text.length > 220) return false;
+    }
 
     const wordCount = text.split(" ").filter(Boolean).length;
-    return wordCount <= 8;
+    return allowExpandedHeuristics ? wordCount <= 28 : wordCount <= 8;
   };
 
   const createChecklistNode = (text: string) => {
@@ -420,12 +424,14 @@ function convertChecklistSections(doc: Document) {
     let cursor = node.nextElementSibling;
     let introNode: Element | null = null;
     let shouldTreatAsChecklist = checklistHeadingPattern.test(headingText);
+    let allowExpandedHeuristics = false;
 
     if (cursor && cursor.tagName.toLowerCase() === "p") {
       const introText = (cursor.textContent || "").replace(/\s+/g, " ").trim();
       if (checklistIntroPattern.test(introText)) {
         introNode = cursor;
         shouldTreatAsChecklist = true;
+        allowExpandedHeuristics = true;
         cursor = cursor.nextElementSibling;
       }
     }
@@ -453,7 +459,7 @@ function convertChecklistSections(doc: Document) {
         }
       }
 
-      if (!isShortChecklistCandidate(cursor)) {
+      if (!isShortChecklistCandidate(cursor, allowExpandedHeuristics)) {
         break;
       }
 

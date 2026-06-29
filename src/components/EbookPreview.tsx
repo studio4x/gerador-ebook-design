@@ -220,6 +220,29 @@ export function EbookPreview({ settings, contentPages, buildVersion, isPrintMode
              return '\n\n' + content + '\n\n';
          }
      });
+
+     turndownService.addRule('checklistItem', {
+         filter: function (node) {
+             return node.nodeName === 'DIV' && node.classList.contains('checklist-item');
+         },
+         replacement: function (_content, node) {
+             const label = node.querySelector('.checklist-text');
+             const text = (label?.textContent || node.textContent || '')
+               .replace(/\s+/g, ' ')
+               .trim();
+             if (!text) return '';
+             return `\n[ ] ${text}\n`;
+         }
+     });
+
+     turndownService.addRule('fillLine', {
+         filter: function (node) {
+             return node.nodeName === 'DIV' && node.classList.contains('fill-line');
+         },
+         replacement: function () {
+             return '\n\n____\n\n';
+         }
+     });
      
      turndownService.keep(['span', 'u']);
      
